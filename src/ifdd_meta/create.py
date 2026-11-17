@@ -15,12 +15,13 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from . import copysecret
-from .catalogue import CA_USERS, NO_ROOT, SECRET_COPIES, SERVICES, SKIPS, WHEELS
+from .catalogue import CA_USERS, NO_ROOT, PERSIST, SECRET_COPIES, SERVICES, SKIPS, WHEELS
 from .runner import Run, StepError
 from .settings import Settings
 from .templates import location
 
 STATE_DIR = ".ifdd-meta"
+WF_GIT_TOKEN = "IFDD_META_WF_GIT_TOKEN"
 STATE_FILE = "instances.json"
 
 
@@ -111,11 +112,25 @@ def create(
         state[service] = new[0]
         _save_state(settings, state)
         run.note(f"{service}: {workdir / new[0]}")
+        _restore_persistent(settings, service, workdir / new[0], run)
 
     _copy_wheels(settings, state, services, run)
     _certificates(settings, state, services, run)
     _secrets(settings, state, run)
+    _wf_git_token(settings, state, run)
     return state
+
+
+def _restore_persistent(settings: Settings, service: str, path: Path, run: Run) -> None:
+    """Put files kept by "down --purge" back into a new instance."""
+    for relative in PERSIST.get(service, ()):
+        kept = settings["persist"] / service / relative
+        if kept.is_file():
+            target = path / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(kept, target)
+            target.chmod(0o600)
+            run.overview(f"Restored {service}/{relative} from {settings['persist']}")
 
 
 def _directories(path: Path) -> set[str]:
@@ -185,3 +200,16 @@ def _secrets(settings: Settings, state, run: Run) -> None:
             changed = copysecret.write_env(target, name, value, kestra=kind == "kestra")
         what = f"{variable} -> {service}/{path}" + (f" ({name})" if name else "")
         run.overview(f"Secret {what}" + ("" if changed else " (unchanged)"))
+
+
+def _wf_git_token(settings: Settings, state, run: Run) -> None:
+    """IFDD_META_WF_GIT_TOKEN (environment or .env) into wf as SECRET_GIT_TOKEN."""
+    token = settings.secrets.get(WF_GIT_TOKEN)
+    if "wf" not in state or not token:
+        return
+    target = settings["workdir"] / state["wf"] / "secrets" / "kestra.env"
+    changed = copysecret.write_env(target, "GIT_TOKEN", token, kestra=True)
+    run.overview(
+        f"Secret {WF_GIT_TOKEN} -> wf/secrets/kestra.env (GIT_TOKEN)"
+        + ("" if changed else " (unchanged)")
+    )

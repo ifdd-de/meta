@@ -10,7 +10,7 @@ operator. The design, with everything planned, is in
 [`docs/design.md`](docs/design.md).
 
 **Status:** in development. Available so far: `compile`, `config show`, `config check`,
-`create`.
+`create`, `build`, `up`, `down`, `status`, `logs`.
 
 ## Requirements
 
@@ -73,6 +73,28 @@ local CA (TLS mode `local-ca`) and copies the client secrets from
 existing instance. Run it as a normal user: the hooks of keycloak and ts refuse
 root. The console shows one line per step; the full output is in
 `<workdir>/logs/` (mode 0600), `--verbose` shows it as well.
+
+## Build, start, stop
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml build
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml up            # in order, waits for health
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml status
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml logs --output logs/
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml down [--purge]
+```
+
+`up` creates the Docker networks, starts Traefik alone, then keycloak, be, ui,
+schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts and
+ts-api, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
+`down --purge` also removes volumes, networks and the instances, but keeps
+`proxy/letsencrypt/acme.json` in the persist directory; `create` puts it back.
+`IFDD_META_WF_GIT_TOKEN` (environment or `.env`) goes into wf as
+`SECRET_GIT_TOKEN`.
+
+The workflow `integration.yml` runs `create`, `build` and `up` on a fresh GitHub
+runner with the real images and checks that every service answers through the
+proxy; logs, image digests and the use of disk and memory are kept as artefacts.
 
 ## Configuration
 

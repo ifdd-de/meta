@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,9 @@ class Settings:
     file: Path | None
     values: Mapping[str, Any]
     sources: Mapping[str, str]
+    #: IFDD_META_* values of .env and the environment (the environment wins), for
+    #: secrets such as IFDD_META_WF_GIT_TOKEN; never shown.
+    secrets: Mapping[str, str] = dataclass_field(default_factory=dict, repr=False)
 
     def __getitem__(self, name: str) -> Any:
         return self.values[name]
@@ -138,7 +142,12 @@ def load(
     for package in values["wheels"]:
         if package not in WHEEL_PACKAGES:
             raise SettingsError(f"wheels ({FILE}): unknown package {package!r}")
-    return Settings(file=path, values=values, sources=sources)
+    secrets = {
+        key: value
+        for key, value in {**dotenv, **environ}.items()
+        if key.startswith(ENV_PREFIX) and value
+    }
+    return Settings(file=path, values=values, sources=sources, secrets=secrets)
 
 
 def _settings_path(explicit: Path | None, environ: Mapping[str, str], cwd: Path) -> Path | None:
