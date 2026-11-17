@@ -222,6 +222,17 @@ Output (each file marked as generated):
 | `.env.example` | names of the secrets the tool needs, without values |
 | `hosts.txt` | host names for DNS records, or `/etc/hosts` lines for short names |
 
+**Derived values:** host names (`<label>.<suffix>` or the short label) and their
+URLs, the realm URL and its endpoints, the issuers of oauth2-proxy and Grafana,
+`ifdd_oidc_client_id` and `ifdd_oidc_jwks_audience` (equal to
+`ifdd_oidc_backend_client_id`), the internal hosts of the proxy (hosts of the
+selected services; the dashboard gets none), Let's Encrypt and its address, the
+CA file of oauth2-proxy (none with Let's Encrypt), the login gate (on with wf),
+the Traefik service of oauth2-proxy (`<proxy slug>-oauth2-proxy`), the wf SSO
+group (equal to the Keycloak group), the CSPs of API docs and UI, and
+`ifdd_ts_be_url` (equal to `ifdd_be_url`, so Grafana reaches the backend over
+HTTPS). With short names and a local CA the result equals the defaults.
+
 The generated variables file stays explicit (rule B.3) and reaches cruft unchanged.
 `compile --check` fails if the files on disk differ from a fresh compilation.
 Generated files are always overwritten as a whole; changes go into the

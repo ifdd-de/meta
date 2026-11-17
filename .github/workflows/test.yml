@@ -39,3 +39,39 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  config:
+    name: config (demo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Generated files are up to date
+        run: ifdd-meta compile --check config/demo/installation.yaml
+
+      - name: Variables file against the templates
+        run: ifdd-meta --settings config/demo/ifdd-meta.yaml config check
+
+      # Every template renders with the generated variables, at the reference of
+      # the demo; the hooks run as the (unprivileged) runner user.
+      - name: Render every template
+        run: |
+          ref=$(python -c 'import yaml; print(yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]["ref"])')
+          for service in proxy keycloak be ui schema type unit ct ts ts-api wf model; do
+            echo "::group::$service@$ref"
+            cookiecutter --no-input --checkout "$ref" \
+              --config-file config/demo/cookiecutter_all.yaml \
+              --output-dir rendered "https://github.com/ifdd-de/$service"
+            echo "::endgroup::"
+          done
+          if grep -rl --exclude=test_config.py 'cookiecutter\.' rendered; then
+            echo "unrendered cookiecutter variables"; exit 1
+          fi

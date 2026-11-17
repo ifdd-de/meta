@@ -17,6 +17,7 @@ dependencies = [
     "cruft~=2.16.0",
     "typer~=0.29.1",
     "PyYAML~=6.0.3",
+    "Jinja2~=3.1",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +35,9 @@ ifdd-meta = "ifdd_meta.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ifdd_meta = ["data/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

@@ -11,3 +11,13 @@ release follows the first successful integration run.
   `ifdd-meta.yaml` and built-in defaults, in this order; `ifdd-meta config show`
   lists every value with its source.
 - Unit tests and the workflow `test.yml` (ruff, pytest on Python 3.11 to 3.14).
+- `ifdd-meta compile`: writes `cookiecutter_all.yaml`, `ifdd-meta.yaml`,
+  `.env.example` and `hosts.txt` from a short description; values not derived
+  come from `src/ifdd_meta/data/defaults.yaml` (all template variables of
+  v26.11.1 except the versions); `--check` compares only.
+- `ifdd-meta config check`: the variables file against the `cookiecutter.json`
+  of every template at the chosen reference.
+- `config/demo/`: description of the public demo and its generated files.
+- Workflow `test.yml`, job `config (demo)`: generated files up to date,
+  `config check` against GitHub, every template renders with the generated
+  variables.
