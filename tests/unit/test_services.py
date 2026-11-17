@@ -162,6 +162,7 @@ def test_status_and_logs(world):
     rows = services.status(settings(world))
     assert ("be", "backend-1", "running", "healthy") in rows
     assert all(row[0] not in ("ct", "model") for row in rows)
+    assert {row[0] for row in services.status(settings(world), only=["be", "ui"])} == {"be", "ui"}
     run, _ = run_for(world)
     written = services.logs(settings(world), run, world / "out")
     assert (world / "out" / "be.log").read_text() == "log of backend\n"

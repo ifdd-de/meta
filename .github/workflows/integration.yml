@@ -74,7 +74,7 @@ jobs:
         run: ifdd-meta --settings "$SETTINGS" up --only "$START"
 
       - name: Status
-        run: ifdd-meta --settings "$SETTINGS" status
+        run: ifdd-meta --settings "$SETTINGS" status --only "$START"
 
       - name: Services answer through the proxy
         run: |

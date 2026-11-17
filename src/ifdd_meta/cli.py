@@ -216,11 +216,11 @@ def down_command(
 
 
 @app.command("status")
-def status_command(ctx: typer.Context) -> None:
-    """State and health of every container."""
+def status_command(ctx: typer.Context, only: OnlyOption = None) -> None:
+    """State and health of every container; exit 1 if one is not running or not healthy."""
     settings = _settings(ctx)
     try:
-        rows = services.status(settings)
+        rows = services.status(settings, _only(only))
     except create.CreateError as error:
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from None

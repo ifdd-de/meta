@@ -130,10 +130,12 @@ def down(
     shutil.rmtree(settings["workdir"] / STATE_DIR, ignore_errors=True)
 
 
-def status(settings: Settings) -> list[tuple[str, str, str, str]]:
+def status(
+    settings: Settings, only: Iterable[str] | None = None
+) -> list[tuple[str, str, str, str]]:
     """(service, container, state, health) of every container."""
     rows = []
-    for service, path in _instances(settings, None).items():
+    for service, path in _instances(settings, only).items():
         if service in ("ct", "model"):
             continue
         result = subprocess.run(
