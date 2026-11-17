@@ -58,7 +58,8 @@ def test_without_wf_there_is_no_login_gate(tmp_path):
         describe(tmp_path, "installation: x\nservices: [proxy, keycloak, be, ui]\n")
     )
     assert result.values["ifdd_proxy_enable_oauth2_proxy"] == "n"
-    assert result.values["ifdd_keycloak_proxy_gate_hosts"] == ""
+    # keycloak needs a value even without the gate (its hook rejects an empty one)
+    assert result.values["ifdd_keycloak_proxy_gate_hosts"] == "wf"
     assert result.values["ifdd_proxy_internal_hosts"] == "id, rest, ui"
     assert result.files["hosts.txt"].splitlines()[-1] == "127.0.0.1 id rest ui"
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]

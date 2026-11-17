@@ -87,7 +87,7 @@ def derive(description: Description, values: dict) -> dict[str, str]:
     realm_url = f"https://{host('id')}/realms/{d.realm}"
     endpoint = f"{realm_url}/protocol/openid-connect"
     url = {label: f"https://{host(label)}" for label in HOST_LABELS.values()}
-    gate = host("wf") if "wf" in services and values["ifdd_wf_enable_sso"] == "y" else ""
+    gate_on = "wf" in services and values["ifdd_wf_enable_sso"] == "y"
     backend_client = values["ifdd_oidc_backend_client_id"]
     proxy_slug = _render(values["ifdd_proxy_prj_slug"], values)
 
@@ -129,8 +129,10 @@ def derive(description: Description, values: dict) -> dict[str, str]:
         "ifdd_proxy_enable_letsencrypt": "y" if d.tls == "letsencrypt" else "n",
         "ifdd_proxy_letsencrypt_email": d.contact,
         "ifdd_proxy_oauth2_proxy_ca_file": "" if d.tls == "letsencrypt" else "ca.crt",
-        "ifdd_proxy_enable_oauth2_proxy": "y" if gate else "n",
-        "ifdd_keycloak_proxy_gate_hosts": gate,
+        "ifdd_proxy_enable_oauth2_proxy": "y" if gate_on else "n",
+        # always the wf host: the keycloak hook (v26.11.1) rejects an empty value,
+        # and a proxy without oauth2-proxy does not use it
+        "ifdd_keycloak_proxy_gate_hosts": host("wf"),
         "ifdd_proxy_oauth2_proxy_service": f"{proxy_slug}-oauth2-proxy",
         "ifdd_wf_sso_group": values["ifdd_keycloak_wf_admin_group"],
         # content security policies: the realm, and for the UI also be, type, unit
@@ -178,6 +180,7 @@ def _settings(description: Description, name: str) -> str:
         f"installation: {description.installation}\n"
         f"variables: {VARIABLES_FILE}\n"
         "environment: production\n"
+        f"tls: {description.tls}\n"
         "templates:\n"
         "  source: https://github.com/ifdd-de\n"
         f"  ref: {description.ref}\n"

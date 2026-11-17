@@ -9,7 +9,8 @@ same tool serves the CI of this repository, a demo server and the servers of an
 operator. The design, with everything planned, is in
 [`docs/design.md`](docs/design.md).
 
-**Status:** in development. Available so far: `compile`, `config show`, `config check`.
+**Status:** in development. Available so far: `compile`, `config show`, `config check`,
+`create`.
 
 ## Requirements
 
@@ -57,6 +58,21 @@ lie below `example.ifdd.de`, which is reserved for examples.
 every template at the chosen reference: a missing variable, one that no template
 defines, a version, a secret-like name, a malformed choice or Jinja that refers
 to another variable is an error.
+
+## Create the instances
+
+```bash
+uv run ifdd-meta --settings config/demo/ifdd-meta.yaml create          # all services
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml create --only be,ui  # some
+```
+
+`create` runs `cruft create` for every service with its skip list and the
+template reference of the settings, then copies optional wheels, creates the
+local CA (TLS mode `local-ca`) and copies the client secrets from
+`keycloak/.env` into the instances that use them. It never overwrites an
+existing instance. Run it as a normal user: the hooks of keycloak and ts refuse
+root. The console shows one line per step; the full output is in
+`<workdir>/logs/` (mode 0600), `--verbose` shows it as well.
 
 ## Configuration
 

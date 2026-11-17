@@ -8,9 +8,11 @@ from typing import Annotated
 
 import typer
 
-from . import __version__, check, compiler
+from . import __version__, check, compiler, create
+from .copysecret import SecretError
 from .description import DescriptionError
 from .description import load as load_description
+from .runner import Run, StepError
 from .settings import ENVIRONMENTS, SERVICES, SettingsError, load
 from .yamltext import LayoutError
 
@@ -141,6 +143,30 @@ def compile_command(
         return
     for path in compiler.write(result, directory):
         typer.echo(f"wrote {path}")
+
+
+def _only(value: str | None) -> list[str] | None:
+    return [item.strip() for item in value.split(",") if item.strip()] if value else None
+
+
+@app.command("create")
+def create_command(
+    ctx: typer.Context,
+    only: Annotated[
+        str | None, typer.Option(help="Comma-separated services; default: all of the settings.")
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show the log.")] = False,
+) -> None:
+    """Create the instances with cruft, the local CA and the client secrets."""
+    settings = _settings(ctx)
+    run = Run(settings["workdir"] / "logs", "create", typer.echo, verbose)
+    try:
+        state = create.create(settings, run, _only(only))
+    except (create.CreateError, StepError, SecretError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        typer.echo(f"log: {run.log}", err=True)
+        raise typer.Exit(1) from None
+    run.overview(f"{len(state)} instances in {settings['workdir']}; log: {run.log}")
 
 
 def main() -> None:
