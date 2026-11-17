@@ -34,6 +34,27 @@ def test_invalid_settings_exit_with_1(tmp_path, monkeypatch):
     assert "error: environment (command line)" in result.output
 
 
+def test_compile_writes_and_check_compares(tmp_path):
+    description = tmp_path / "installation.yaml"
+    description.write_text("installation: x\n")
+    result = runner.invoke(app, ["compile", str(description)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "cookiecutter_all.yaml").is_file()
+    assert runner.invoke(app, ["compile", "--check", str(description)]).exit_code == 0
+    (tmp_path / "hosts.txt").write_text("edited by hand\n")
+    result = runner.invoke(app, ["compile", "--check", str(description)])
+    assert result.exit_code == 1
+    assert "hosts.txt is missing or out of date" in result.output
+
+
+def test_compile_reports_an_invalid_description(tmp_path):
+    description = tmp_path / "installation.yaml"
+    description.write_text("installation: x\ntls: acme\n")
+    result = runner.invoke(app, ["compile", str(description)])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+
+
 def test_unknown_option_is_a_usage_error():
     result = runner.invoke(app, ["--nope", "config", "show"])
     assert result.exit_code == 2

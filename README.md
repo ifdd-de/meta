@@ -9,7 +9,7 @@ same tool serves the CI of this repository, a demo server and the servers of an
 operator. The design, with everything planned, is in
 [`docs/design.md`](docs/design.md).
 
-**Status:** in development. Available so far: settings and `config show`.
+**Status:** in development. Available so far: `compile`, `config show`, `config check`.
 
 ## Requirements
 
@@ -25,6 +25,38 @@ cd meta
 uv run ifdd-meta --help
 uv run ifdd-meta --settings path/to/ifdd-meta.yaml config show
 ```
+
+## Describe an installation
+
+A short description of an installation is enough; `ifdd-meta compile` writes
+the complete files next to it:
+
+```bash
+uv run ifdd-meta compile config/demo/installation.yaml          # write
+uv run ifdd-meta compile --check config/demo/installation.yaml  # compare only
+uv run ifdd-meta --settings config/demo/ifdd-meta.yaml config check
+```
+
+| Generated file | Content |
+|---|---|
+| `cookiecutter_all.yaml` | every template variable except the versions, with comments |
+| `ifdd-meta.yaml` | settings of the tool |
+| `.env.example` | names of the secrets the tool needs, without values |
+| `hosts.txt` | host names for DNS records, or a line for `/etc/hosts` with short names |
+
+The description sets the installation name, a host suffix (empty: short names
+`id`, `rest`, `ui`, …), the TLS mode (`local-ca`, `letsencrypt`, `own`), a
+contact address, the realms, the context root, the services, the template
+reference and, under `overrides`, any template variable. Values not derived from
+it come from [`src/ifdd_meta/data/defaults.yaml`](src/ifdd_meta/data/defaults.yaml).
+The only example is the description of the public demo,
+[`config/demo/installation.yaml`](config/demo/installation.yaml); its host names
+lie below `example.ifdd.de`, which is reserved for examples.
+
+`config check` compares the variables file with the `cookiecutter.json` of
+every template at the chosen reference: a missing variable, one that no template
+defines, a version, a secret-like name, a malformed choice or Jinja that refers
+to another variable is an error.
 
 ## Configuration
 

@@ -1,0 +1,15 @@
+# Description of the public IFDD demo; "ifdd-meta compile" turns it into the
+# files next to it. The host names lie below example.ifdd.de, which ADR 0002 of
+# ifdd-de/overview reserves for examples. No addresses, no secrets.
+installation: demo
+hosts:
+  suffix: demo.grid.example.ifdd.de
+tls: letsencrypt
+contact: maintainers@ifdd.de
+realm: ifdd
+extra_realms: []
+context_root: ifdd.de
+services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
+templates:
+  ref: v26.11.1
+overrides: {}
