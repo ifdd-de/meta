@@ -70,6 +70,7 @@ no template variable has such a name today.
 installation: example               # name; work directory and log names
 variables: cookiecutter_all.yaml    # variables file, relative to this file
 environment: production             # production | development
+tls: local-ca                       # local-ca | letsencrypt | own (from the description)
 templates:
   source: https://github.com/ifdd-de   # URL base or directory of local clones
   ref: v26.11.1                         # tag, branch or commit for all templates
@@ -121,7 +122,7 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `config check` | files found and parsed; every key of the variables file defined by at least one template at the chosen ref; every template variable present (except versions), a missing one is an error; no secret-like names; settings valid | nothing |
 | `compile` | writes the variables file and the other files from a description (section 10); `--check` only compares | generated files |
 | `config show` | effective settings with the source of each value | nothing |
-| `create` | `cruft create` per service with skips and ref; wheels; local CA unless Let's Encrypt or own certificates; CA and secrets distributed; state recorded | work directory |
+| `create` | `cruft create` per service with skips and ref; wheels; local CA (`tls: local-ca`: `proxy/adm_01_certs.sh`, `ca.crt` into `certs/` of be, ct, ts, ts-api, wf); client secrets from `keycloak/.env`; instance directories recorded in `<workdir>/.ifdd-meta/instances.json`; refuses existing instances and, for keycloak and ts, root | work directory |
 | `update` | `cruft update` per instance, `--set` passed as `--variables-to-update`; lists `.rej` files and fails on them | instances |
 | `build` | images of all or selected services | images |
 | `up` / `down` | start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
@@ -227,7 +228,8 @@ URLs, the realm URL and its endpoints, the issuers of oauth2-proxy and Grafana,
 `ifdd_oidc_client_id` and `ifdd_oidc_jwks_audience` (equal to
 `ifdd_oidc_backend_client_id`), the internal hosts of the proxy (hosts of the
 selected services; the dashboard gets none), Let's Encrypt and its address, the
-CA file of oauth2-proxy (none with Let's Encrypt), the login gate (on with wf),
+CA file of oauth2-proxy (none with Let's Encrypt), the login gate (on with wf; its host list always names the wf host, because the
+keycloak hook rejects an empty one),
 the Traefik service of oauth2-proxy (`<proxy slug>-oauth2-proxy`), the wf SSO
 group (equal to the Keycloak group), the CSPs of API docs and UI, and
 `ifdd_ts_be_url` (equal to `ifdd_be_url`, so Grafana reaches the backend over

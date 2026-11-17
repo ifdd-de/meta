@@ -9,9 +9,7 @@ from typing import Any
 
 import yaml
 
-from .settings import SERVICES
-
-TLS_MODES = ("local-ca", "letsencrypt", "own")
+from .settings import SERVICES, TLS_MODES
 
 _LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 _REALM = re.compile(r"[a-z0-9][a-z0-9_-]*")

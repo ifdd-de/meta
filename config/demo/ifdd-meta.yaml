@@ -2,6 +2,7 @@
 installation: demo
 variables: cookiecutter_all.yaml
 environment: production
+tls: letsencrypt
 templates:
   source: https://github.com/ifdd-de
   ref: v26.11.1

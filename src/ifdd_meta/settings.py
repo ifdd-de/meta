@@ -24,6 +24,7 @@ SERVICES = (
     "ct", "ts", "ts-api", "wf", "model",
 )  # fmt: skip
 ENVIRONMENTS = ("production", "development")
+TLS_MODES = ("local-ca", "letsencrypt", "own")
 WHEEL_PACKAGES = ("be-core", "ts-core")
 
 SETTINGS_FILE = "ifdd-meta.yaml"
@@ -60,6 +61,7 @@ FIELDS = (
     Field("installation", "str", "example"),
     Field("variables", "path", "cookiecutter_all.yaml"),
     Field("environment", "choice", "production", ENVIRONMENTS),
+    Field("tls", "choice", "local-ca", TLS_MODES),
     Field("templates.source", "str", "https://github.com/ifdd-de"),
     Field("templates.ref", "str", "main"),
     Field("templates.refs", "mapping", {}),
