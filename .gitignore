@@ -1,0 +1,20 @@
+# Instances, persistent state and logs of local runs
+/work/
+/state/
+
+# Secrets and machine-local settings
+.env
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Byte code and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.venv/
