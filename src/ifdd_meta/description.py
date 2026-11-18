@@ -38,6 +38,8 @@ class Description:
     ref: str
     overrides: dict[str, str | list[str]] = field(default_factory=dict)
     wf_git: str = "local"
+    #: service -> Git reference, for templates without a tag of ``ref``.
+    refs: dict[str, str] = field(default_factory=dict)
 
     def host(self, label: str) -> str:
         return f"{label}.{self.suffix}" if self.suffix else label
@@ -106,11 +108,19 @@ def load(path: Path) -> Description:
         raise DescriptionError(f"{path}: services must not repeat")
 
     templates = data.get("templates") or {}
-    if not isinstance(templates, dict) or set(templates) - {"ref"}:
-        raise DescriptionError(f"{path}: templates takes only 'ref'")
+    if not isinstance(templates, dict) or set(templates) - {"ref", "refs"}:
+        raise DescriptionError(f"{path}: templates takes only 'ref' and 'refs'")
     ref = templates.get("ref", "main")
     if not isinstance(ref, str) or not ref.strip():
         raise DescriptionError(f"{path}: templates.ref must be a non-empty text")
+    refs = templates.get("refs") or {}
+    if not isinstance(refs, dict):
+        raise DescriptionError(f"{path}: templates.refs must be a mapping service: ref")
+    for service, service_ref in refs.items():
+        if service not in SERVICES:
+            raise DescriptionError(f"{path}: templates.refs: unknown service {service!r}")
+        if not isinstance(service_ref, str) or not service_ref.strip():
+            raise DescriptionError(f"{path}: templates.refs.{service} must be a non-empty text")
 
     wf_git = data.get("wf_git", "local")
     if wf_git not in WF_GIT_MODES:
@@ -138,6 +148,7 @@ def load(path: Path) -> Description:
         ref=ref.strip(),
         overrides=clean,
         wf_git=wf_git,
+        refs={s: refs[s].strip() for s in SERVICES if s in refs},
     )
 
 

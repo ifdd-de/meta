@@ -60,12 +60,12 @@ jobs:
       - name: Variables file against the templates
         run: ifdd-meta --settings config/demo/ifdd-meta.yaml config check
 
-      # Every template renders with the generated variables, at the reference of
+      # Every template renders with the generated variables, at its reference in
       # the demo; the hooks run as the (unprivileged) runner user.
       - name: Render every template
         run: |
-          ref=$(python -c 'import yaml; print(yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]["ref"])')
           for service in proxy keycloak be ui schema type unit ct ts ts-api wf model; do
+            ref=$(python -c 'import sys, yaml; t = yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]; print(t.get("refs", {}).get(sys.argv[1], t["ref"]))' "$service")
             echo "::group::$service@$ref"
             cookiecutter --no-input --checkout "$ref" \
               --config-file config/demo/cookiecutter_all.yaml \

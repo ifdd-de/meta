@@ -73,7 +73,7 @@ environment: production             # production | development
 tls: local-ca                       # local-ca | letsencrypt | own (from the description)
 templates:
   source: https://github.com/ifdd-de   # URL base or directory of local clones
-  ref: v26.11.1                         # tag, branch or commit for all templates
+  ref: v26.11.2                         # tag, branch or commit for all templates
   refs: {}                              # exceptions, e.g. {be: main}
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]  # run in catalogue order
 workdir: work/example               # instances are created here
@@ -221,7 +221,9 @@ extra_realms: []
 context_root: ifdd.de
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 templates:
-  ref: v26.11.1
+  ref: v26.11.2                       # tag, branch or commit for all templates
+  refs:                               # exceptions, e.g. templates without that tag
+    schema: v26.11.1
 overrides:                            # any template variable, set explicitly
   ifdd_ts_retention_period: "10y"
 ```
