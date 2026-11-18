@@ -95,21 +95,8 @@ class Admin:
         self.base = base_url.rstrip("/")
         self.realm_admin = f"{self.base}/admin/realms/{urllib.parse.quote(realm)}"
         self.context = context
-        try:
-            answer, _ = request(
-                context,
-                "POST",
-                f"{self.base}/realms/master/protocol/openid-connect/token",
-                form={
-                    "grant_type": "password",
-                    "client_id": "admin-cli",
-                    "username": user,
-                    "password": password,
-                },
-            )
-        except KeycloakError as error:
-            raise KeycloakError(f"login as {user} (master) failed: {error}") from None
-        self.token = answer["access_token"]
+        self._user, self._password = user, password
+        self.token = self._login()
         #: (client id, role) of every role this object created, e.g. to remove them again.
         self.created_roles: list[tuple[str, str]] = []
 
@@ -139,8 +126,37 @@ class Admin:
         ca = settings["workdir"] / state["proxy"] / "certs" / "ca.crt" if "proxy" in state else None
         return cls.from_instance(settings["workdir"] / state["keycloak"], realm, ca)
 
+    def _login(self) -> str:
+        try:
+            answer, _ = request(
+                self.context,
+                "POST",
+                f"{self.base}/realms/master/protocol/openid-connect/token",
+                form={
+                    "grant_type": "password",
+                    "client_id": "admin-cli",
+                    "username": self._user,
+                    "password": self._password,
+                },
+            )
+        except KeycloakError as error:
+            raise KeycloakError(f"login as {self._user} (master) failed: {error}") from None
+        return answer["access_token"]
+
     def call(self, method: str, path: str, body: Any = None) -> tuple[Any, dict[str, str]]:
-        return request(self.context, method, self.realm_admin + path, token=self.token, body=body)
+        """One admin call; logs in again once if the token has expired (401).
+
+        Admin tokens of the master realm are short-lived; a test session that
+        takes longer than they live otherwise fails while cleaning up.
+        """
+        url = self.realm_admin + path
+        try:
+            return request(self.context, method, url, token=self.token, body=body)
+        except KeycloakError as error:
+            if error.status != 401:
+                raise
+        self.token = self._login()
+        return request(self.context, method, url, token=self.token, body=body)
 
     def client_uuid(self, client_id: str) -> str | None:
         found, _ = self.call("GET", f"/clients?clientId={urllib.parse.quote(client_id)}")

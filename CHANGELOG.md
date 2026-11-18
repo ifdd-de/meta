@@ -8,6 +8,9 @@ release follows the first successful integration run.
 - Browser test of the ui without a read role: waits for the ui's hint
   (`role="status"`, ui 26.11.2) instead of a quiet network, then checks that
   no aspect is offered; the reader must not see the hint.
+- The admin API helper logs in again once when its token has expired (401);
+  a test session longer than the short-lived master token failed while
+  deleting the test client (found by a counter-check run at v26.11.1).
 - Templates at release 26.11.2 (keycloak, proxy, be, ui, ts-api, wf); the
   others stay at 26.11.1. The description takes `templates.refs` (service: ref)
   for templates without the tag of `templates.ref`; `compile` writes it into
