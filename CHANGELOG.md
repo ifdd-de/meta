@@ -5,6 +5,9 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- Browser test of the ui without a read role: waits for the ui's hint
+  (`role="status"`, ui 26.11.2) instead of a quiet network, then checks that
+  no aspect is offered; the reader must not see the hint.
 - Templates at release 26.11.2 (keycloak, proxy, be, ui, ts-api, wf); the
   others stay at 26.11.1. The description takes `templates.refs` (service: ref)
   for templates without the tag of `templates.ref`; `compile` writes it into
