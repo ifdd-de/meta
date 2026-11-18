@@ -122,7 +122,7 @@ def create(
     if settings["wf_git"] == "local":
         if "wf" in services:
             network = _variables(settings)["ifdd_proxy_network"]
-            gitserver.prepare(workdir, settings["git_host"], network, run)
+            gitserver.prepare(workdir, settings["installation"], settings["git_host"], network, run)
             state["git"] = gitserver.DIRECTORY
             _save_state(settings, state)
     else:

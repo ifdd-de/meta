@@ -65,16 +65,17 @@ def test_prepare_writes_compose_and_a_private_env(tmp_path):
     run = Run(tmp_path / "logs", "test", lambda line: None)
     work = tmp_path / "work"
     work.mkdir()
-    path = gitserver.prepare(work, "git", "proxy-net", run)
+    path = gitserver.prepare(work, "ci", "git", "proxy-net", run)
     env = (path / ".env").read_text()
     assert "IFDD_GIT_HOST=git\n" in env and "IFDD_PROXY_NETWORK=proxy-net\n" in env
+    assert "IFDD_GIT_PROJECT=ci-git\n" in env
     assert f"IFDD_GIT_IMAGE={gitserver.IMAGE}\n" in env
     assert stat.S_IMODE((path / ".env").stat().st_mode) == 0o600
     key = [line for line in env.splitlines() if line.startswith("IFDD_GIT_SECRET_KEY=")][0]
     assert len(key) > 40
     assert "gitea:" in (path / "docker-compose.yml").read_text()
     # a second prepare keeps the secret key
-    gitserver.prepare(work, "git", "proxy-net", run)
+    gitserver.prepare(work, "ci", "git", "proxy-net", run)
     assert key in (path / ".env").read_text()
 
 

@@ -32,7 +32,7 @@ SERVICE = "gitea"
 TOKEN_SCOPES = "write:repository,write:user"
 
 
-def prepare(workdir: Path, host: str, network: str, run: Run) -> Path:
+def prepare(workdir: Path, installation: str, host: str, network: str, run: Run) -> Path:
     """Write the Compose project and its .env; keeps an existing secret key."""
     target = workdir / DIRECTORY
     target.mkdir(exist_ok=True)
@@ -49,7 +49,7 @@ def prepare(workdir: Path, host: str, network: str, run: Run) -> Path:
     env.chmod(0o600)
     env.write_text(
         "# Written by 'ifdd-meta create'; holds a secret, never put it into Git.\n"
-        f"IFDD_GIT_PROJECT={workdir.name}-git\n"
+        f"IFDD_GIT_PROJECT={installation}-git\n"
         f"IFDD_GIT_IMAGE={IMAGE}\n"
         f"IFDD_GIT_HOST={host}\n"
         f"IFDD_PROXY_NETWORK={network}\n"
