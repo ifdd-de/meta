@@ -47,8 +47,11 @@ class Installation:
     def env(self, service: str) -> dict[str, str]:
         return envfile.read(self.paths[service] / ".env")
 
-    def run(self, service: str, *argv: str, stdin: str | None = None, timeout: int = 600) -> str:
-        """A command in an instance directory; output is returned, never printed.
+    def run(
+        self, service: str, *argv: str, stdin: str | None = None, stderr: bool = False,
+        timeout: int = 600,
+    ) -> str:  # fmt: skip
+        """A command in an instance directory; returns stdout (and stderr), never prints it.
 
         On failure only the last lines of the output are shown: the commands
         used here print no secrets.
@@ -64,7 +67,7 @@ class Installation:
         )
         tail = "\n".join((result.stdout + result.stderr).splitlines()[-20:])
         assert result.returncode == 0, f"{service}: {argv[0]} … failed:\n{tail}"
-        return result.stdout
+        return result.stdout + (result.stderr if stderr else "")
 
     def compose(self, service: str, *args: str, stdin: str | None = None) -> str:
         """``docker compose`` with the Compose file of the environment."""

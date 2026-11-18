@@ -68,11 +68,15 @@ def test_flow_round_trip(wf, http):
         "tasks:\n  - id: hello\n    type: io.kestra.plugin.core.log.Log\n"
         "    message: written by the ifdd-meta integration tests\n"
     )
-    assert kestra(wf, "POST", "/flows", source) == 200
+    created = kestra(wf, "POST", "/flows", source)
+    assert created == 200, f"creating the flow: HTTP {created}"
     try:
         wf.run("wf", "./adm_03_git_push.sh")
-        assert any(flow in file for file in flow_files(wf, http, namespace))
+        files = flow_files(wf, http, namespace)
+        assert any(flow in file for file in files), f"{flow} not in Git: {files}"
     finally:
-        assert kestra(wf, "DELETE", f"/flows/{namespace}/{flow}") == 204
+        deleted = kestra(wf, "DELETE", f"/flows/{namespace}/{flow}")
+        assert deleted in (200, 204), f"deleting the flow: HTTP {deleted}"
         wf.run("wf", "./adm_03_git_push.sh")
-    assert not any(flow in file for file in flow_files(wf, http, namespace))
+    files = flow_files(wf, http, namespace)
+    assert not any(flow in file for file in files), f"{flow} still in Git: {files}"

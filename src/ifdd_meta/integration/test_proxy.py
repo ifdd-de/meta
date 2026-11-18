@@ -1,5 +1,8 @@
 """The proxy: security headers and CSP on the routes, the dashboard behind a password."""
 
+import socket
+from urllib.parse import urlsplit
+
 import pytest
 
 ROUTES = [
@@ -32,8 +35,23 @@ def test_security_headers(installation, http, service, variable, path, csp):
     assert found == expected, f"headers: {found}"
 
 
-def test_dashboard_needs_a_password(installation, http):
-    if not installation.has("proxy"):
-        pytest.skip("no proxy instance")
-    answer = http.get(f"https://{installation.variables['ifdd_proxy_host']}/dashboard/")
-    assert answer.status_code == 401, f"HTTP {answer.status_code}: {answer.text[:300]}"
+def status_through(address: str, host: str, path: str, context) -> int:
+    """HTTP status of GET https://host/path, sent to address (like curl --resolve)."""
+    with socket.create_connection((address, 443), timeout=30) as raw:
+        with context.wrap_socket(raw, server_hostname=host) as tls:
+            request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+            tls.sendall(request.encode())
+            status_line = tls.recv(256).split(b"\r\n", 1)[0]
+    return int(status_line.split()[1])
+
+
+def test_dashboard_needs_a_password(installation, ssl_context):
+    """The dashboard host has no DNS record; it is reached at the address of be."""
+    if not installation.has("proxy", "be"):
+        pytest.skip("no proxy or be instance")
+    if installation.settings["tls"] != "local-ca":
+        pytest.skip("only the local CA covers the dashboard host (it has no DNS record)")
+    variables = installation.variables
+    address = socket.gethostbyname(urlsplit(variables["ifdd_be_url"]).hostname)
+    status = status_through(address, variables["ifdd_proxy_host"], "/dashboard/", ssl_context)
+    assert status == 401, f"HTTP {status}"

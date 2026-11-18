@@ -1,5 +1,7 @@
 """ct: the example pipelines load an energy grid into be and time series into ts-api."""
 
+import time
+
 import pytest
 
 from .conftest import bearer
@@ -35,8 +37,13 @@ def test_energy_grid(ct, http, tokens):
 def test_time_series(ct, http, tokens):
     if not ct.has("ts-api", "type"):
         pytest.skip("needs ts-api and type")
-    ct.run("ct", "./adm_02_run.sh", "-f", SERIES)
-    stores = http.get(f"{ct.variables['ifdd_ts_api_url']}/stores", headers=bearer(tokens("api")))
-    assert stores.status_code == 200, stores.text
-    # Only ct writes this store here.
-    assert "humidity.ops.example.ifdd.de" in stores.json(), stores.text
+    output = ct.run("ct", "./adm_02_run.sh", "-f", SERIES, stderr=True)
+    url = f"{ct.variables['ifdd_ts_api_url']}/stores"
+    for _ in range(30):  # VictoriaMetrics makes new series searchable after a moment
+        stores = http.get(url, headers=bearer(tokens("api")))
+        assert stores.status_code == 200, stores.text
+        if "humidity.ops.example.ifdd.de" in stores.json():  # only ct writes this store here
+            return
+        time.sleep(1)
+    tail = "\n".join(output.splitlines()[-15:])
+    raise AssertionError(f"no humidity store: {stores.text}; ct printed:\n{tail}")
