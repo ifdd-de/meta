@@ -128,11 +128,11 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `local-setup` | prints the `sudo` commands for the `/etc/hosts` block of `hosts.txt` and for trusting the local CA (macOS: System keychain; Debian/Ubuntu: `update-ca-certificates`); `--remove` prints the commands that undo them; runs nothing | nothing |
 | `update` | `cruft update` per instance, `--set` passed as `--variables-to-update`; lists `.rej` files and fails on them | instances |
 | `build` | images of all or selected services | images |
-| `up` / `down` | start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
+| `up` / `down` | first a check that the Docker daemon sees the work directory (a container of the Traefik image looks for the state file), then start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
 | `status`, `logs` | state of all services; logs into a directory (CI artefacts) | nothing / log files |
 | `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown | realm |
 | `keycloak add-user` | a user with a generated password (new file, 0600), groups, realm roles and client roles; `--temporary` asks for a new password at the first login. Context patterns: `--role ifdd:<pattern> --create-roles`, so there is no `add-context-role` | realm |
-| `demo load` | demo user `ifdd-demo` (readers, writers, privileged, wf group, context root; created, or password set and missing groups added) with the password `IFDD_META_DEMO_PASSWORD` (a new one goes into `.env`, 0600), then the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
+| `demo load` | demo user `ifdd-demo` (readers, writers, privileged, wf group, context root, with ts the realm role `ifdd_ts_role_viewer`; created, or password set and missing groups and roles added) with the password `IFDD_META_DEMO_PASSWORD` (a new one goes into `.env`, 0600), then the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
 | `test` | integration tests against the running installation (section 8); data only with the setting `tests: write` | test data |
 | `docs render` | the instance chapter (former `.adm_docs`) with the same variables | output directory |
 

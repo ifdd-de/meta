@@ -282,21 +282,23 @@ class Admin:
         password: str,
         *,
         groups: list[str] = (),
+        realm_roles: list[str] = (),
         first_name: str = "",
         last_name: str = "ifdd-meta",
     ) -> tuple[str, bool]:
-        """Create the user, or set the password and add missing groups; (id, created).
+        """Create the user, or set the password and add missing groups and realm roles.
 
-        Groups the user has beyond ``groups`` stay.
+        Returns (id, created). Groups and roles the user has beyond these stay.
         """
         uuid = self.user_uuid(username)
         if uuid is None:
             created = self.add_user(
-                username, password, groups=list(groups), first_name=first_name,
-                last_name=last_name,
+                username, password, groups=list(groups), realm_roles=list(realm_roles),
+                first_name=first_name, last_name=last_name,
             )  # fmt: skip
             return created, True
         group_ids = [self._group_id(name) for name in groups]
+        realm = [self._realm_role(name) for name in realm_roles]
         self.call(
             "PUT",
             f"/users/{uuid}/reset-password",
@@ -304,6 +306,8 @@ class Admin:
         )
         for group_id in group_ids:
             self.call("PUT", f"/users/{uuid}/groups/{group_id}")
+        if realm:  # Keycloak keeps a role granted twice once
+            self.call("POST", f"/users/{uuid}/role-mappings/realm", realm)
         return uuid, False
 
     def delete_user(self, uuid: str) -> None:

@@ -1,7 +1,8 @@
 """``ifdd-meta demo load``: the demo user and the example data of ct.
 
-The demo user ``ifdd-demo`` reads and writes every domain context and gets
-into wf. Its password comes from ``IFDD_META_DEMO_PASSWORD`` (environment or
+The demo user ``ifdd-demo`` reads and writes every domain context, gets
+into wf and views the Grafana dashboards of ts (realm role
+``ifdd_ts_role_viewer``). Its password comes from ``IFDD_META_DEMO_PASSWORD`` (environment or
 ``.env`` next to the settings file); without one a new password is generated
 and written into that ``.env`` (mode 0600). The password is never shown.
 
@@ -45,6 +46,11 @@ def groups(variables: dict, services: set[str]) -> list[str]:
     return names
 
 
+def realm_roles(variables: dict, services: set[str]) -> list[str]:
+    """The viewer role of Grafana (ts), which reads realm roles from the token."""
+    return [variables["ifdd_ts_role_viewer"]] if "ts" in services else []
+
+
 def password(settings: Settings, run: Run) -> str:
     """The configured password, or a new one written into .env next to the settings."""
     value = settings.secrets.get(PASSWORD_VARIABLE)
@@ -66,10 +72,17 @@ def load(settings: Settings, run: Run, admin_factory=keycloak.Admin.from_setting
     variables = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
     value = password(settings, run)
     admin = admin_factory(settings)
+    services = set(state)
     _, created = admin.ensure_user(
-        USER, value, groups=groups(variables, set(state)), first_name="IFDD", last_name="Demo"
+        USER,
+        value,
+        groups=groups(variables, services),
+        realm_roles=realm_roles(variables, services),
+        first_name="IFDD",
+        last_name="Demo",
     )
-    run.overview(f"Demo user {USER} " + ("created" if created else "updated (password, groups)"))
+    changed = "created" if created else "updated (password, groups, roles)"
+    run.overview(f"Demo user {USER} {changed}")
     if "ct" not in state:
         run.overview("No ct instance: no demo data")
         return

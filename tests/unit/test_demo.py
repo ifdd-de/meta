@@ -16,6 +16,7 @@ VARIABLES = {
     "ifdd_keycloak_group_nodes_privileged": "ifdd_nodes_privileged",
     "ifdd_keycloak_wf_admin_group": "ifdd_wf_admins",
     "ifdd_context_root": "ifdd.de",
+    "ifdd_ts_role_viewer": "readonly",
 }
 
 
@@ -23,9 +24,15 @@ class FakeAdmin:
     def __init__(self):
         self.users = {}
 
-    def ensure_user(self, username, password, *, groups=(), first_name="", last_name=""):
+    def ensure_user(
+        self, username, password, *, groups=(), realm_roles=(), first_name="", last_name=""
+    ):
         created = username not in self.users
-        self.users[username] = {"password": password, "groups": list(groups)}
+        self.users[username] = {
+            "password": password,
+            "groups": list(groups),
+            "realm_roles": list(realm_roles),
+        }
         return f"id-{username}", created
 
 
@@ -52,7 +59,13 @@ def run_load(settings, admin):
     return lines
 
 
-ALL = {"keycloak": "keycloak", "ct": "ct", "ts-api": "time-series-api", "wf": "wf"}
+ALL = {
+    "keycloak": "keycloak",
+    "ct": "ct",
+    "ts": "time-series",
+    "ts-api": "time-series-api",
+    "wf": "wf",
+}
 
 
 def test_new_password_goes_into_the_env_file_and_is_not_shown(tmp_path):
@@ -70,6 +83,7 @@ def test_new_password_goes_into_the_env_file_and_is_not_shown(tmp_path):
         "ifdd_nodes_readers", "ifdd_nodes_writers", "ifdd_nodes_privileged",
         "ifdd_wf_admins", "ifdd_ctx_ifdd.de",
     ]  # fmt: skip
+    assert admin.users["ifdd-demo"]["realm_roles"] == ["readonly"]  # Grafana viewer
     calls = (settings["workdir"] / "ct" / "calls.txt").read_text().splitlines()
     assert calls == [f"-f {demo.GRID}", f"-f {demo.SERIES}"]
     assert "==> Demo user ifdd-demo created" in lines
@@ -83,7 +97,7 @@ def test_a_known_password_is_used_and_a_second_run_updates(tmp_path):
     lines = run_load(settings, admin)
     assert admin.users["ifdd-demo"]["password"] == "known-one"
     assert not (tmp_path / ".env").exists()
-    assert "==> Demo user ifdd-demo updated (password, groups)" in lines
+    assert "==> Demo user ifdd-demo updated (password, groups, roles)" in lines
 
 
 def test_without_wf_ts_api_and_ct(tmp_path):
@@ -91,6 +105,7 @@ def test_without_wf_ts_api_and_ct(tmp_path):
     admin = FakeAdmin()
     run_load(settings, admin)
     assert "ifdd_wf_admins" not in admin.users["ifdd-demo"]["groups"]
+    assert admin.users["ifdd-demo"]["realm_roles"] == []  # no Grafana without ts
     calls = (settings["workdir"] / "ct" / "calls.txt").read_text().splitlines()
     assert calls == [f"-f {demo.GRID}"]  # no time series without ts-api
     settings = installation(tmp_path / "x", {"keycloak": "keycloak"})

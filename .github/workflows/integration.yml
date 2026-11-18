@@ -121,6 +121,18 @@ jobs:
           done
           [ -z "${failed:-}" ]
 
+      - name: Mount check sees a missing directory
+        run: |
+          # The check of 'up' must answer 1 (not seen) where the daemon creates
+          # an empty directory for a source it does not have.
+          version=$(sed -n 's/^  ifdd_proxy_traefik_version: "\(.*\)"$/\1/p' ci-run/cookiecutter_all.yaml)
+          code=0
+          docker run --rm --network none --entrypoint /bin/sh \
+            --volume "$RUNNER_TEMP/not-shared:/check:ro" "traefik:$version" \
+            -c 'test -f /check/instances.json' || code=$?
+          echo "exit code $code"
+          [ "$code" = 1 ]
+
       - name: Demo data
         run: |
           ifdd-meta --settings "$SETTINGS" demo load

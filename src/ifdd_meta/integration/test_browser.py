@@ -205,6 +205,18 @@ def test_grafana_lets_in_a_viewer(users, page, grafana):
     assert [org["role"] for org in orgs] == ["Viewer"], f"roles: {orgs}"
 
 
+def test_grafana_lets_in_the_demo_user(installation, page, grafana):
+    """After 'ifdd-meta demo load': ifdd-demo views the dashboards (realm role)."""
+    password = installation.settings.secrets.get("IFDD_META_DEMO_PASSWORD")
+    if not password:
+        pytest.skip("no IFDD_META_DEMO_PASSWORD: run 'ifdd-meta demo load' first")
+    login(page, f"{grafana}/login/generic_oauth", User("ifdd-demo", password), grafana)
+    me = page.goto(f"{grafana}/api/user")
+    assert me.status == 200, f"HTTP {me.status}"
+    orgs = page.goto(f"{grafana}/api/user/orgs").json()
+    assert [org["role"] for org in orgs] == ["Viewer"], f"roles: {orgs}"
+
+
 def test_grafana_refuses_a_user_without_realm_role(users, page, grafana):
     login(page, f"{grafana}/login/generic_oauth", users["wf"], grafana)
     me = page.goto(f"{grafana}/api/user")

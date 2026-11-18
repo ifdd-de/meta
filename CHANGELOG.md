@@ -22,6 +22,11 @@ release follows the first successful integration run.
   `generate-time-series`; the password comes from `IFDD_META_DEMO_PASSWORD`, a
   new one is written into `.env` (0600) and never shown. The integration run
   loads the demo data twice.
+- `ifdd-meta up` first checks with a throwaway container of the Traefik image
+  that the Docker daemon sees the work directory; a daemon in a VM (Colima)
+  sees only shared directories and would mount empty directories instead.
+- The demo user gets the realm role of a Grafana viewer (`ifdd_ts_role_viewer`)
+  with ts; a browser test signs in to Grafana as the demo user.
 - Browser tests outside Linux use the system trust store and are skipped with a
   hint if Chromium does not trust the local CA; a new test signs in as the demo
   user.

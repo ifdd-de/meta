@@ -17,7 +17,7 @@ import yaml
 
 from . import gitserver
 from .catalogue import PERSIST, SERVICES
-from .create import STATE_DIR, CreateError, load_state, select
+from .create import STATE_DIR, STATE_FILE, CreateError, load_state, select
 from .runner import Run
 from .settings import Settings
 
@@ -94,6 +94,7 @@ def up(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
     instances = _instances(settings, only)
     environment = settings["environment"]
     wait = ["--wait", "--wait-timeout", str(settings["wait_timeout"])]
+    check_mounts(settings, run)
     for network in _networks(settings, instances):
         if not _docker_ok(["docker", "network", "inspect", network]):
             run.overview(f"Creating network {network}")
@@ -203,6 +204,43 @@ def logs(settings: Settings, run: Run, directory: Path) -> list[Path]:
         written.append(target)
         run.note(f"{service}: {target}")
     return written
+
+
+#: Exit code of the check command when the file is missing (docker itself uses 125-127).
+NOT_SEEN = 1
+
+
+def check_mounts(settings: Settings, run: Run) -> None:
+    """Whether the Docker daemon sees the work directory, before anything starts.
+
+    A daemon in a VM (Colima, Docker Desktop) sees only the shared directories.
+    For a bind mount whose source it does not see, Docker creates an empty
+    directory, and the services fail later with "is a directory" or stay
+    unhealthy. The check mounts the state directory into a container of the
+    Traefik image (pulled by ``build``) and looks for the state file.
+    """
+    state_dir = settings["workdir"] / STATE_DIR
+    image = f"traefik:{_context(settings)['ifdd_proxy_traefik_version']}"
+    argv = [
+        "docker", "run", "--rm", "--network", "none", "--entrypoint", "/bin/sh",
+        "--volume", f"{state_dir}:/check:ro", image,
+        "-c", f"test -f /check/{STATE_FILE}",
+    ]  # fmt: skip
+    run.overview("Checking that Docker sees the work directory")
+    result = subprocess.run(
+        argv, cwd=settings["workdir"], capture_output=True, text=True, check=False
+    )
+    run.note(f"$ {' '.join(argv)} -> exit code {result.returncode}")
+    if result.returncode == NOT_SEEN:
+        raise CreateError(
+            f"Docker does not see {settings['workdir']}: its bind mounts would be empty "
+            "directories. With Colima add the directory (writable) to 'mounts:' in "
+            "~/.colima/<profile>/colima.yaml and restart Colima "
+            "(docs/local-macos-colima.md)"
+        )
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout).strip().splitlines()[-1:] or [""]
+        raise CreateError(f"checking the mounts with {image} failed: {output[0]}")
 
 
 def _context(settings: Settings) -> dict:

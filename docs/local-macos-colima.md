@@ -14,6 +14,7 @@ printed by `ifdd-meta local-setup`; you run them yourself.
 |---|---|---|
 | macOS on Apple silicon (arm64) | `uname -m` | |
 | Colima with the Docker runtime | `colima list` | at least 4 CPUs, 12 GiB memory, 60 GiB disk |
+| Colima shares the run directory, writable | `grep -A6 '^mounts:' ~/.colima/<profile>/colima.yaml` | see below; `ifdd-meta up` checks it |
 | Docker CLI, Compose and buildx | `docker compose version`, `docker buildx version` | the Dockerfiles of ui and ct use BuildKit |
 | Git with name and e-mail | `git config user.name`, `git config user.email` | every instance becomes a Git repository |
 | uv | `uv --version` | brings Python 3.14 |
@@ -29,6 +30,29 @@ colima start --cpu 4 --memory 12 --disk 60
 colima list
 ```
 
+The Docker daemon runs in the Colima VM and sees only the directories Colima
+shares with it. Without explicit `mounts:` Colima shares the home directory; with
+a list of its own, only the listed ones. For a bind mount whose source the daemon
+does not see, Docker silently creates an empty directory: Traefik then fails with
+`read /etc/traefik/traefik.yml: is a directory`. Add the run directory (section
+2) to `~/.colima/<profile>/colima.yaml`, with the absolute path:
+
+```yaml
+mounts:
+  - location: /Users/<you>/ifdd/run
+    writable: true
+```
+
+Then restart Colima (`colima stop <profile>`, `colima start <profile>`) and check
+that a container sees the files (section 6 must be done):
+
+```bash
+docker run --rm -v "$IFDD_RUN/work/proxy/traefik:/t:ro" alpine ls -la /t
+```
+
+`traefik.yml` must be a file. `ifdd-meta up` makes the same check (with the
+Traefik image) before it starts anything.
+
 ## 2. Paths
 
 Set these in every new terminal (or put them into `~/.zshrc`):
@@ -39,7 +63,8 @@ export IFDD_INST="$HOME/ifdd/installations/notebook"   # description, in a priva
 export IFDD_RUN="$HOME/ifdd/run/notebook"              # instances and kept files, not in Git
 ```
 
-Colima shares the home directory with its VM; keep all three below `$HOME`.
+Colima must share `$IFDD_RUN` with its VM (section 1); `$IFDD_META` and
+`$IFDD_INST` need not be shared.
 
 ## 3. ifdd-meta
 
@@ -230,6 +255,8 @@ ifdd-meta down --purge
 | Symptom | Check |
 |---|---|
 | `create`: Git needs a name and an e-mail address | `git config --global user.name …` and `user.email …` |
+| `up`: Docker does not see the work directory | `mounts:` of Colima (section 1) |
+| Traefik unhealthy, log: `is a directory` | the same: the daemon does not see the run directory |
 | `up` hangs or a port is taken | `sudo lsof -iTCP:443 -sTCP:LISTEN`; another landscape still running? |
 | browser tests skipped: Chromium does not trust the local CA | step 7, then start the test again |
 | `build` fails for lack of space | `colima list`; `docker system df`; resize the VM (section 1) |
@@ -237,10 +264,18 @@ ifdd-meta down --purge
 
 ## Honesty notes
 
-- Tested on Linux only (GitHub runner and a sandbox): `compile`, `create` with
-  the real templates, the instance repositories and their `.gitignore`,
-  `local-setup` and its Linux commands, `demo load`, the browser tests.
-- Not run on macOS by the authors: the `security` commands (taken from
-  `man security`), the BSD form `sed -i ''`, Chromium with the System keychain,
-  Colima's port forwarding for 80 and 443, the arm64 variants of all images and
-  OpenSSL 4 in `proxy/adm_01_certs.sh`. The first run on a Mac is the test.
+- Tested on Linux (GitHub runner and a sandbox): `compile`, `create` with the
+  real templates, the instance repositories and their `.gitignore`,
+  `local-setup` and its Linux commands (add and remove), `demo load` (twice),
+  the mount check, the browser tests.
+- Tested on a Mac (macOS 27.0.1, arm64, Colima 0.10.3 with 4 CPUs, 12 GiB,
+  60 GiB, Docker 29.5.2, Compose 5.6.1, buildx 0.39.0, Python 3.14.9, OpenSSL
+  4.1.0), sections 1 to 10 once, from the guide before the mount check and the
+  Grafana role of the demo user existed: `ifdd-meta test` 42 passed, so the
+  browser tests ran with the local CA in the System keychain (after the
+  printed `security add-trusted-cert`). Colima forwarded 80 and 443; all images ran on
+  arm64; OpenSSL 4 created the local CA. The first run stopped at Traefik
+  (`is a directory`) because Colima shared only another directory.
+- Not run on a Mac: `local-setup --remove` (`security remove-trusted-cert`,
+  `delete-certificate -Z`, the BSD form `sed -i ''`), the mount check of
+  `ifdd-meta up` and the Grafana login of the demo user.

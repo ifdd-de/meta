@@ -20,6 +20,10 @@ case "$*" in
   *" ps --all --format json")
     echo '{"Name":"'"$(basename "$PWD")"'-1","State":"running","Health":"healthy"}' ;;
   *" logs "*) echo "log of $(basename "$PWD")" ;;
+  "run "*)  # the mount check: exit code from $RUN_EXIT (1: file not seen)
+    [ -n "$RUN_EXIT" ] && { echo "docker says no" >&2; exit "$RUN_EXIT"; }
+    case "$*" in *"/.ifdd-meta:/check:ro traefik:v9 -c test -f /check/instances.json") ;;
+      *) exit 99 ;; esac ;;
 esac
 """
 
@@ -54,6 +58,7 @@ def world(tmp_path, monkeypatch):
     (work / ".ifdd-meta" / "instances.json").write_text(json.dumps(state))
     (tmp_path / "vars.yaml").write_text(
         "default_context:\n  ifdd_proxy_network: net-a\n  ifdd_ts_ingest_network: net-b\n"
+        "  ifdd_proxy_traefik_version: v9\n"
     )
     (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\nwait_timeout: 7\n")
     return tmp_path
@@ -120,6 +125,26 @@ def test_up_creates_networks_and_keeps_the_order(world):
     # networks that exist are not created again
     services.up(settings(world), run)
     assert len([c for c in calls(world) if "network create" in c]) == 2
+
+
+def test_up_checks_first_that_docker_sees_the_work_directory(world, monkeypatch):
+    run, lines = run_for(world)
+    services.up(settings(world), run)
+    first = calls(world)[0]
+    assert first.startswith("work docker run --rm --network none --entrypoint /bin/sh")
+    assert lines[0] == "==> Checking that Docker sees the work directory"
+
+
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [("1", "Docker does not see .*/work: .*colima.yaml"), ("125", "failed: docker says no")],
+)
+def test_up_stops_before_anything_starts_when_the_check_fails(world, monkeypatch, code, message):
+    monkeypatch.setenv("RUN_EXIT", code)
+    run, _ = run_for(world)
+    with pytest.raises(create.CreateError, match=message):
+        services.up(settings(world), run)
+    assert [c for c in calls(world) if " run " not in c] == []  # no network, no service
 
 
 def test_up_only_some_services(world):

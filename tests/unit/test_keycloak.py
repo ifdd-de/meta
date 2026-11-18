@@ -145,8 +145,8 @@ class FakeKeycloak:
         if rest == "/reset-password" and method == "PUT":
             user["credentials"] = [body]
             return 204, None
-        if rest == "/role-mappings/realm" and method == "POST":
-            user["realm"] += [r["name"] for r in body]
+        if rest == "/role-mappings/realm" and method == "POST":  # granted twice: kept once
+            user["realm"] += [r["name"] for r in body if r["name"] not in user["realm"]]
             return 204, None
         return None
 
@@ -326,10 +326,17 @@ def test_ensure_user_creates_and_then_updates(fake):
     user = fake.users[uuid]
     assert (user["firstName"], user["lastName"]) == ("IFDD", "Demo")
     user["groups"].append("ifdd_wf_admins")  # added by an operator
+    assert user["realm"] == []
     again, created = api.ensure_user(
-        "ifdd-demo", "second", groups=["ifdd_nodes_readers", "ifdd_nodes_writers"]
+        "ifdd-demo",
+        "second",
+        groups=["ifdd_nodes_readers", "ifdd_nodes_writers"],
+        realm_roles=["readonly"],
     )
     assert (again, created) == (uuid, False)
+    assert user["realm"] == ["readonly"]
+    api.ensure_user("ifdd-demo", "second", realm_roles=["readonly"])
+    assert user["realm"] == ["readonly"]
     assert user["credentials"] == [{"type": "password", "value": "second", "temporary": False}]
     assert user["groups"] == ["ifdd_nodes_readers", "ifdd_wf_admins", "ifdd_nodes_writers"]
     assert len(fake.users) == 1
@@ -340,4 +347,11 @@ def test_ensure_user_checks_the_groups_before_it_changes_anything(fake):
     uuid, _ = api.ensure_user("ifdd-demo", "first")
     with pytest.raises(keycloak.KeycloakError, match="group nope not found"):
         api.ensure_user("ifdd-demo", "second", groups=["nope"])
+    with pytest.raises(keycloak.KeycloakError, match="HTTP 404"):
+        api.ensure_user("ifdd-demo", "second", realm_roles=["superuser"])
     assert fake.users[uuid]["credentials"][0]["value"] == "first"
+
+
+def test_ensure_user_grants_realm_roles_to_a_new_user(fake):
+    uuid, created = admin(fake).ensure_user("ifdd-demo", "pw", realm_roles=["readonly"])
+    assert created and fake.users[uuid]["realm"] == ["readonly"]

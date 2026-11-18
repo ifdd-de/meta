@@ -113,7 +113,10 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml logs --output logs/
 uv run ifdd-meta --settings path/to/ifdd-meta.yaml down [--purge]
 ```
 
-`up` creates the Docker networks, starts Traefik alone, then keycloak, be, ui,
+`up` first checks that the Docker daemon sees the work directory (a throwaway
+container of the Traefik image looks for the state file; a daemon in a VM such
+as Colima sees only shared directories), then creates the Docker networks,
+starts Traefik alone, then keycloak, be, ui,
 schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts and
 ts-api, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
 `down --purge` also removes volumes, networks and the instances, but keeps
@@ -132,8 +135,8 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml demo load
 ```
 
 Creates the user `ifdd-demo` (groups: readers, writers, privileged, the wf
-group with wf, and the context root), or sets its password and adds missing
-groups, and loads the fake energy grid and its time series with the ct pipelines
+group with wf, and the context root; with ts the realm role of a Grafana viewer),
+or sets its password and adds missing groups and roles, and loads the fake energy grid and its time series with the ct pipelines
 `generate-energy-grid` and `generate-time-series` (fixed seed: a second run adds
 nothing). The password is `IFDD_META_DEMO_PASSWORD` from the environment or the
 `.env` next to the settings; without one a new password is written into that
