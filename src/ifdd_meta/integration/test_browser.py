@@ -171,7 +171,7 @@ def wf(installation):
         pytest.skip("needs wf and proxy")
     if installation.settings["environment"] != "production":
         pytest.skip("oauth2-proxy guards wf in production only")
-    return installation.variables["ifdd_wf_url"]
+    return f"https://{installation.variables['ifdd_wf_host']}"
 
 
 def test_wf_lets_in_its_group(users, page, wf):
