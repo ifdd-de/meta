@@ -47,10 +47,21 @@ def test_public_names_with_lets_encrypt(tmp_path):
     assert v["ifdd_proxy_letsencrypt_email"] == "ops@example.org"
     assert v["ifdd_proxy_oauth2_proxy_ca_file"] == ""
     assert v["ifdd_keycloak_proxy_gate_hosts"] == "wf.a.example.org"
-    assert "connect-src 'self' https://id.a.example.org;" in v["ifdd_proxy_csp_api_docs"]
-    assert "frame-src https://id.a.example.org;" in v["ifdd_proxy_csp_ui"]
-    hosts = result.files["hosts.txt"].splitlines()
-    assert "rest.a.example.org" in hosts and not any(h.startswith("proxy.") for h in hosts)
+    # whole values, not substrings: exact policies and host lists
+    assert v["ifdd_proxy_csp_api_docs"] == (
+        "default-src 'self'; frame-ancestors 'none'; img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+        "connect-src 'self' https://id.a.example.org; worker-src 'self' blob:"
+    )
+    assert v["ifdd_proxy_csp_ui"] == (
+        "default-src 'self'; frame-ancestors 'none'; frame-src https://id.a.example.org; "
+        "img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; connect-src 'self' https://id.a.example.org "
+        "https://rest.a.example.org https://type.a.example.org https://unit.a.example.org"
+    )
+    labels = ["id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "git"]
+    names = [f"{label}.a.example.org" for label in labels]
+    assert result.files["hosts.txt"].splitlines()[2:] == names  # no dashboard host
 
 
 def test_without_wf_there_is_no_login_gate(tmp_path):
@@ -125,9 +136,13 @@ def test_local_git_server_for_wf(tmp_path):
     v = result.values
     assert v["ifdd_wf_git_url"] == "https://git.a.example.org/kestra/flows.git"
     assert v["ifdd_wf_git_username"] == "kestra"
-    assert v["ifdd_proxy_internal_hosts"].endswith("wf.a.example.org, git.a.example.org")
-    assert "git.a.example.org" in result.files["hosts.txt"].splitlines()
-    assert "wf_git: local\ngit_host: git.a.example.org\n" in result.files["ifdd-meta.yaml"]
+    assert v["ifdd_proxy_internal_hosts"].split(", ")[-2:] == [
+        "wf.a.example.org",
+        "git.a.example.org",
+    ]
+    assert result.files["hosts.txt"].splitlines()[-1] == "git.a.example.org"
+    generated = yaml.safe_load(result.files["ifdd-meta.yaml"])
+    assert (generated["wf_git"], generated["git_host"]) == ("local", "git.a.example.org")
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
 
 
@@ -142,8 +157,8 @@ def test_external_git_server_for_wf(tmp_path):
     )
     assert result.values["ifdd_wf_git_url"] == "https://git.example.org/team/flows.git"
     assert "git" not in result.values["ifdd_proxy_internal_hosts"].split(", ")
-    assert "IFDD_META_WF_GIT_TOKEN=" in result.files[".env.example"]
-    assert "wf_git: external\n" in result.files["ifdd-meta.yaml"]
+    assert "IFDD_META_WF_GIT_TOKEN=" in result.files[".env.example"].splitlines()
+    assert yaml.safe_load(result.files["ifdd-meta.yaml"])["wf_git"] == "external"
 
 
 def test_warning_for_short_names_with_wf(tmp_path):
