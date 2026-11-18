@@ -85,7 +85,7 @@ def _ca(settings: Settings, installation: str, remove: bool, platform: str) -> l
             return [
                 "# Remove the local CA from the System keychain",
                 f"sudo security remove-trusted-cert -d {quoted}",
-                f"sudo security delete-certificate -Z {sha1(ca)} {KEYCHAIN}",
+                f"sudo security delete-certificate -Z {sha256(ca)} {KEYCHAIN}",
             ]
         return [
             "# Trust the local CA in the System keychain (browsers, curl, ifdd-meta test)",
@@ -106,7 +106,11 @@ def _ca(settings: Settings, installation: str, remove: bool, platform: str) -> l
     return [f"# No commands for {platform}: trust {ca} by hand"]
 
 
-def sha1(ca: Path) -> str:
-    """SHA-1 fingerprint of a PEM certificate, as 'security delete-certificate -Z' takes it."""
+def sha256(ca: Path) -> str:
+    """SHA-256 fingerprint of a PEM certificate, for 'security delete-certificate -Z'.
+
+    Newer versions of ``security`` take a SHA-256 (or SHA-1) hash there; it
+    names the certificate to delete, nothing else.
+    """
     der = ssl.PEM_cert_to_DER_cert(ca.read_text(encoding="ascii"))
-    return hashlib.sha1(der, usedforsecurity=False).hexdigest().upper()
+    return hashlib.sha256(der).hexdigest().upper()

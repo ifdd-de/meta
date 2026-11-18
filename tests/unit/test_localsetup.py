@@ -14,7 +14,7 @@ from ifdd_meta.settings import load
 
 @pytest.fixture
 def ca_file(tmp_path_factory):
-    """A real self-signed CA (openssl), and its SHA-1 fingerprint from openssl."""
+    """A real self-signed CA (openssl), and its SHA-256 fingerprint from openssl."""
     directory = tmp_path_factory.mktemp("ca")
     ca = directory / "ca.crt"
     subprocess.run(
@@ -24,7 +24,7 @@ def ca_file(tmp_path_factory):
         check=True, capture_output=True,
     )  # fmt: skip
     out = subprocess.run(
-        ["openssl", "x509", "-in", str(ca), "-noout", "-fingerprint", "-sha1"],
+        ["openssl", "x509", "-in", str(ca), "-noout", "-fingerprint", "-sha256"],
         check=True, capture_output=True, text=True,
     ).stdout  # fmt: skip
     return ca, out.strip().split("=", 1)[1].replace(":", "")

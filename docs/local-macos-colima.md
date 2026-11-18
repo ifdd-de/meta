@@ -277,5 +277,6 @@ ifdd-meta down --purge
   arm64; OpenSSL 4 created the local CA. The first run stopped at Traefik
   (`is a directory`) because Colima shared only another directory.
 - Not run on a Mac: `local-setup --remove` (`security remove-trusted-cert`,
-  `delete-certificate -Z`, the BSD form `sed -i ''`), the mount check of
+  `delete-certificate -Z` with a SHA-256 hash, which newer versions of
+  `security` take besides SHA-1, and the BSD form `sed -i ''`), the mount check of
   `ifdd-meta up` and the Grafana login of the demo user.

@@ -15,8 +15,8 @@ release follows the first successful integration run.
   `demo.test`; DNS records only for public names.
 - `ifdd-meta local-setup [--remove]`: prints the `sudo` commands for the
   `/etc/hosts` block and for trusting the local CA (macOS System keychain,
-  Debian/Ubuntu `update-ca-certificates`), and the commands that undo them;
-  runs nothing. The integration run executes the printed commands.
+  Debian/Ubuntu `update-ca-certificates`), and the commands that undo them
+  (the keychain entry is named by its SHA-256 fingerprint); runs nothing. The integration run executes the printed commands.
 - `ifdd-meta demo load`: demo user `ifdd-demo` (created, or password set and
   missing groups added) and the ct pipelines `generate-energy-grid` and
   `generate-time-series`; the password comes from `IFDD_META_DEMO_PASSWORD`, a
