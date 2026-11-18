@@ -23,17 +23,29 @@ def location(source: str, service: str) -> str:
 
 def read_file(source: str, service: str, ref: str, name: str) -> str:
     """Content of ``name`` in the template of ``service`` at ``ref`` (committed state only)."""
-    repo = location(source, service)
+    return at(location(source, service), ref, name, service)[1]
+
+
+def at(repo: str, ref: str, name: str, what: str) -> tuple[str, str]:
+    """(commit, content of ``name``) of a template repository at ``ref`` (tag, branch, sha)."""
+    label = f"{what}@{ref}"
     if Path(repo).is_dir():
-        return _git(["git", "-C", repo, "show", f"{ref}:{name}"], f"{service}@{ref}")
+        commit = _git(["git", "-C", repo, "rev-parse", f"{ref}^{{commit}}"], label).strip()
+        return commit, _git(["git", "-C", repo, "show", f"{commit}:{name}"], label)
     with tempfile.TemporaryDirectory(prefix="ifdd-meta-") as tmp:
-        _git(["git", "init", "-q", tmp], service)
-        _git(["git", "-C", tmp, "fetch", "-q", "--depth", "1", repo, ref], f"{service}@{ref}")
-        return _git(["git", "-C", tmp, "show", f"FETCH_HEAD:{name}"], f"{service}@{ref}")
+        _git(["git", "init", "-q", tmp], what)
+        _git(["git", "-C", tmp, "fetch", "-q", "--depth", "1", repo, ref], label)
+        commit = _git(["git", "-C", tmp, "rev-parse", "FETCH_HEAD^{commit}"], label).strip()
+        return commit, _git(["git", "-C", tmp, "show", f"{commit}:{name}"], label)
 
 
 def cookiecutter_json(source: str, service: str, ref: str) -> dict:
-    text = read_file(source, service, ref, "cookiecutter.json")
+    return parse_cookiecutter_json(
+        read_file(source, service, ref, "cookiecutter.json"), service, ref
+    )
+
+
+def parse_cookiecutter_json(text: str, service: str, ref: str) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:

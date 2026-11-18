@@ -5,6 +5,17 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- `ifdd-meta update [--check] [--only …]`: later template changes into the
+  existing instances with `cruft update`, one commit per instance; the result
+  equals a fresh `create` at the new references (shared values from the
+  variables file, changed defaults the template owns such as `ifdd_ui_version`,
+  the skip list of `create` kept against a growing list in cruft 2.16.0, new
+  `*.dist` defaults into `.env` where the old default is still set). Stops at
+  the first conflict and before anything if an instance has uncommitted changes
+  or no Git repository.
+- CI job `update (demo)`: create at v26.11.1, update to the demo's references,
+  compare with a fresh create (`tools/ci/compare_instances.py`).
+
 - Local test installation on macOS with Colima: guide `docs/local-macos-colima.md`.
 - `create` makes every instance a local Git repository (one commit, no remote)
   for later `cruft update`; Git name and e-mail come from the configuration

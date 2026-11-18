@@ -75,3 +75,57 @@ jobs:
           if grep -rl --exclude=test_config.py 'cookiecutter\.' rendered; then
             echo "unrendered cookiecutter variables"; exit 1
           fi
+
+  # Instances created at an older release and updated with 'ifdd-meta update'
+  # must equal instances created fresh at the demo's references. No Docker:
+  # create and update only render (cruft, hooks, the local CA).
+  update:
+    name: update (demo)
+    runs-on: ubuntu-latest
+    env:
+      OLD_REF: v26.11.1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install -e .
+          git config --global user.name "ifdd-meta CI"
+          git config --global user.email "ci@example.org"
+
+      - name: Create at the older release
+        run: |
+          mkdir -p "$RUNNER_TEMP/old" "$RUNNER_TEMP/fresh"
+          python - "$RUNNER_TEMP/old/installation.yaml" <<'PY'
+          import os, sys, yaml
+          description = yaml.safe_load(open("config/demo/installation.yaml"))
+          description["templates"] = {"ref": os.environ["OLD_REF"]}
+          yaml.safe_dump(description, open(sys.argv[1], "w"), sort_keys=False)
+          PY
+          cd "$RUNNER_TEMP/old"
+          ifdd-meta compile installation.yaml
+          ifdd-meta create
+
+      - name: Update to the demo's references
+        run: |
+          cp config/demo/installation.yaml "$RUNNER_TEMP/old/installation.yaml"
+          cp config/demo/installation.yaml "$RUNNER_TEMP/fresh/installation.yaml"
+          cd "$RUNNER_TEMP/old"
+          ifdd-meta compile installation.yaml
+          ifdd-meta update --check
+          ifdd-meta update
+          ifdd-meta update --check | tee check.txt
+          ! grep -q 'would update' check.txt
+
+      - name: Same as a fresh create
+        run: |
+          (cd "$RUNNER_TEMP/fresh" && ifdd-meta compile installation.yaml && ifdd-meta create)
+          # ui keeps ifddVersion in src/Env.js, which is instance-owned (skip
+          # list), so an update leaves the old version there.
+          python tools/ci/compare_instances.py "$RUNNER_TEMP/old/work" "$RUNNER_TEMP/fresh/work" \
+            --known frontend/src/Env.js

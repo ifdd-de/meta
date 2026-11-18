@@ -10,7 +10,7 @@ operator. The design, with everything planned, is in
 [`docs/design.md`](docs/design.md).
 
 **Status:** in development. Available so far: `compile`, `config show`, `config check`,
-`create`, `local-setup`, `build`, `up`, `down`, `status`, `logs`, `demo load`, `test`,
+`create`, `update`, `local-setup`, `build`, `up`, `down`, `status`, `logs`, `demo load`, `test`,
 `keycloak add-client`, `keycloak add-user`.
 
 A test installation on a Mac (Colima): [`docs/local-macos-colima.md`](docs/local-macos-colima.md).
@@ -88,6 +88,39 @@ templates keeps secrets, certificates and data out; if a file that looks like a
 secret (`.env`, files in `secrets/`, keys) would be committed nevertheless,
 `create` stops and leaves that instance without a repository. Nothing is pushed
 anywhere: configuration and data stay on the machine.
+
+## Update the instances
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml update --check       # what would change
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml update [--only be,ui]
+```
+
+Later template changes reach an existing installation one way: from the
+template repositories into the instances, never back. Change the references
+in the description (`templates.ref`, `templates.refs`), run `compile`, then
+`update`. Per instance that is behind its reference, `update` runs
+`cruft update` and commits the result ("Update be to v26.11.2"). The result is
+what a fresh `create` at that reference gives:
+
+- the values of the variables file are passed again, so the description stays
+  the only source of the shared values;
+- a variable the template owns gets the template's new default if that default
+  changed (for example `ifdd_ui_version`), which cruft alone would not do;
+- the skip list in `.cruft.json` stays as `create` wrote it (cruft 2.16.0
+  appends the `[tool.cruft]` list of `pyproject.toml` on every update);
+- `.env` and other files made from a `*.dist` file are skipped by cruft
+  (secrets): a setting that still has the old default of the `*.dist` file gets
+  the new one; values changed by hand and secrets stay; new or removed settings
+  are shown, not added.
+
+Files on the skip list of a template are instance-owned and not updated (for
+ui `src/Env.js`, which also holds `ifddVersion`). Your own committed changes in
+an instance are merged (`git apply -3`). An instance needs a clean working
+tree; at the first conflict `update` stops and leaves that instance
+uncommitted, the following ones untouched. `update` builds and starts nothing:
+run `build`, `up` and `test` afterwards. To undo an update of one instance:
+`git -C <instance> reset --hard HEAD~1`, then compare `.env` with `dotenv.dist`.
 
 ## Host names and the local CA
 

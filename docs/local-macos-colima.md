@@ -250,6 +250,32 @@ Run the printed `sudo` lines, then:
 ifdd-meta down --purge
 ```
 
+## 13. Update to newer templates
+
+Later template releases reach the installation with `ifdd-meta update`, one way:
+from the template repositories into the instances, never back. Change the
+references in `installation.yaml` (`templates.ref`, `templates.refs`), then:
+
+```bash
+ifdd-meta compile installation.yaml
+git add -A && git commit -q -m "Templates at the new references"
+ifdd-meta update --check
+ifdd-meta update
+```
+
+Every updated instance gets one commit ("Update be to …"); lines about `.env`
+name the settings that got a new default, and new settings to add by hand.
+Then build, start and test again:
+
+```bash
+ifdd-meta build
+ifdd-meta up
+ifdd-meta test -v
+```
+
+`update` stops at the first conflict with your own changes in an instance;
+resolve it there, commit, and run `update` again.
+
 ## Troubleshooting
 
 | Symptom | Check |
@@ -260,6 +286,8 @@ ifdd-meta down --purge
 | `up` hangs or a port is taken | `sudo lsof -iTCP:443 -sTCP:LISTEN`; another landscape still running? |
 | browser tests skipped: Chromium does not trust the local CA | step 7, then start the test again |
 | `build` fails for lack of space | `colima list`; `docker system df`; resize the VM (section 1) |
+| `update`: uncommitted changes | `git -C "$IFDD_RUN/work/<instance>" status`; commit or discard them |
+| `update`: conflicts in … | resolve the files in that instance, `git commit -a`, `update` again |
 | a host name does not resolve | `grep -A1 'BEGIN ifdd-meta notebook' /etc/hosts` |
 
 ## Honesty notes
@@ -273,10 +301,14 @@ ifdd-meta down --purge
   4.1.0), sections 1 to 10 once, from the guide before the mount check and the
   Grafana role of the demo user existed: `ifdd-meta test` 42 passed, so the
   browser tests ran with the local CA in the System keychain (after the
-  printed `security add-trusted-cert`). Colima forwarded 80 and 443; all images ran on
-  arm64; OpenSSL 4 created the local CA. The first run stopped at Traefik
+  printed `security add-trusted-cert`). Colima forwarded 80 and 443; all
+  images ran on arm64; OpenSSL 4 created the local CA. The first run stopped at Traefik
   (`is a directory`) because Colima shared only another directory.
-- Not run on a Mac: `local-setup --remove` (`security remove-trusted-cert`,
-  `delete-certificate -Z` with a SHA-256 hash, which newer versions of
-  `security` take besides SHA-1, and the BSD form `sed -i ''`), the mount check of
-  `ifdd-meta up` and the Grafana login of the demo user.
+- Run on that Mac afterwards: `local-setup --remove` as printed then (`security
+  remove-trusted-cert`, `delete-certificate -Z` with the SHA-1 fingerprint, the
+  BSD form `sed -i ''`). It now prints the SHA-256 fingerprint; the usage text
+  of `security delete-certificate` on macOS 27.0.1 lists "SHA-256 (or SHA-1)".
+- Not run on a Mac yet: the mount check of `ifdd-meta up`, the Grafana login
+  of the demo user, `delete-certificate -Z` with SHA-256, and `update`
+  (section 13; tested on Linux from v26.11.1 to the demo's references against
+  a fresh create).

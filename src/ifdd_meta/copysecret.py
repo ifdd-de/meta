@@ -106,6 +106,11 @@ def _unquote(raw: str) -> str:
     return raw.split(" #", 1)[0].strip()
 
 
+def replace_file(path: Path, text: str) -> None:
+    """Write ``text`` over an existing file atomically, keeping its mode."""
+    _write_atomically(path, text, path.stat().st_mode & 0o777)
+
+
 def _write_atomically(path: Path, text: str, mode: int) -> None:
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
