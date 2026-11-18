@@ -11,5 +11,13 @@ extra_realms: []
 context_root: ifdd.de
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 templates:
-  ref: v26.11.1
+  ref: v26.11.2
+  # Templates without a release 26.11.2 stay at their last one.
+  refs:
+    schema: v26.11.1
+    type: v26.11.1
+    unit: v26.11.1
+    ct: v26.11.1
+    ts: v26.11.1
+    model: v26.11.1
 overrides: {}

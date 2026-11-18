@@ -5,6 +5,12 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- Templates at release 26.11.2 (keycloak, proxy, be, ui, ts-api, wf); the
+  others stay at 26.11.1. The description takes `templates.refs` (service: ref)
+  for templates without the tag of `templates.ref`; `compile` writes it into
+  `ifdd-meta.yaml`, and both workflows use the reference of each template.
+- Without wf, `compile` leaves `ifdd_keycloak_proxy_gate_hosts` empty: no host
+  behind the login gate (keycloak 26.11.2 accepts that; 26.11.1 refused it).
 - Design of the tool (`docs/design.md`).
 - Package `ifdd-meta` with the command `ifdd-meta` (typer).
 - Settings from the command line, `IFDD_META_*` environment variables, `.env`,

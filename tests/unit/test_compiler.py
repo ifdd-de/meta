@@ -69,11 +69,26 @@ def test_without_wf_there_is_no_login_gate(tmp_path):
         describe(tmp_path, "installation: x\nservices: [proxy, keycloak, be, ui]\n")
     )
     assert result.values["ifdd_proxy_enable_oauth2_proxy"] == "n"
-    # keycloak needs a value even without the gate (its hook rejects an empty one)
-    assert result.values["ifdd_keycloak_proxy_gate_hosts"] == "wf"
+    # no host behind the gate; keycloak accepts an empty value since 26.11.2
+    assert result.values["ifdd_keycloak_proxy_gate_hosts"] == ""
     assert result.values["ifdd_proxy_internal_hosts"] == "id, rest, ui"
     assert result.files["hosts.txt"].splitlines()[-1] == "127.0.0.1 id rest ui"
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
+
+
+def test_template_refs_reach_the_settings_file(tmp_path):
+    text = "installation: x\ntemplates:\n  ref: v26.11.2\n  refs:\n    ts: v26.11.1\n    be: main\n"
+    result = compiler.compile_description(describe(tmp_path, text))
+    settings = yaml.safe_load(result.files["ifdd-meta.yaml"])
+    # in catalogue order, whatever the order of the description
+    assert settings["templates"] == {
+        "source": "https://github.com/ifdd-de",
+        "ref": "v26.11.2",
+        "refs": {"be": "main", "ts": "v26.11.1"},
+    }
+    assert list(settings["templates"]["refs"]) == ["be", "ts"]
+    plain = compiler.compile_description(describe(tmp_path, "installation: x\n"))
+    assert "refs" not in yaml.safe_load(plain.files["ifdd-meta.yaml"])["templates"]
 
 
 def test_overrides_win_and_are_checked(tmp_path):

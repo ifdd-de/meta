@@ -27,6 +27,8 @@ def test_demo_description_of_the_repository():
     description = load(path)
     assert description.host("rest") == "rest.demo.grid.example.ifdd.de"
     assert description.tls == "letsencrypt"
+    assert description.ref == "v26.11.2"
+    assert description.refs["schema"] == "v26.11.1"
 
 
 @pytest.mark.parametrize(
@@ -38,6 +40,10 @@ def test_demo_description_of_the_repository():
         ("installation: x\ntls: acme\n", "tls must be one of"),
         ("installation: x\ntls: letsencrypt\n", "needs hosts.suffix"),
         ("installation: x\ncontact: nobody\n", "e-mail"),
+        ("installation: x\ntemplates:\n  refs: [be]\n", "templates.refs must be a mapping"),
+        ("installation: x\ntemplates:\n  refs:\n    web: main\n", "unknown service 'web'"),
+        ("installation: x\ntemplates:\n  refs:\n    be: ' '\n", "templates.refs.be must be"),
+        ("installation: x\ntemplates:\n  branch: main\n", "takes only 'ref' and 'refs'"),
         ("installation: x\nrealm: master\n", "invalid realm"),
         ("installation: x\nextra_realms: [ifdd]\n", "must not repeat"),
         ("installation: x\nservices: [be, frontend]\n", "unknown services: frontend"),

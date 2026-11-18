@@ -48,7 +48,8 @@ uv run ifdd-meta --settings config/demo/ifdd-meta.yaml config check
 The description sets the installation name, a host suffix (empty: short names
 `id`, `rest`, `ui`, …), the TLS mode (`local-ca`, `letsencrypt`, `own`), a
 contact address, the realms, the context root, the services, the template
-reference and, under `overrides`, any template variable. Values not derived from
+reference (`templates.ref`, with exceptions per template under `templates.refs`
+for templates without that tag) and, under `overrides`, any template variable. Values not derived from
 it come from [`src/ifdd_meta/data/defaults.yaml`](src/ifdd_meta/data/defaults.yaml).
 Short names work for a quick local test, but not with wf in production: Java
 clients such as Kestra send no server name (SNI) for names without a dot, and

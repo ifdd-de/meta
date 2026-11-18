@@ -145,7 +145,8 @@ def derive(description: Description, values: dict) -> dict[str, str]:
         "ifdd_proxy_enable_oauth2_proxy": "y" if gate_on else "n",
         # always the wf host: the keycloak hook (v26.11.1) rejects an empty value,
         # and a proxy without oauth2-proxy does not use it
-        "ifdd_keycloak_proxy_gate_hosts": host("wf"),
+        # Empty without wf: no host behind the gate (keycloak 26.11.2 or later).
+        "ifdd_keycloak_proxy_gate_hosts": host("wf") if "wf" in description.services else "",
         "ifdd_proxy_oauth2_proxy_service": f"{proxy_slug}-oauth2-proxy",
         "ifdd_wf_sso_group": values["ifdd_keycloak_wf_admin_group"],
         **_wf_git(d),
@@ -207,6 +208,12 @@ def _render(template: str, values: dict) -> str:
     return jinja2.Template(template).render(cookiecutter=values)
 
 
+def _refs(refs: dict[str, str]) -> str:
+    if not refs:
+        return ""
+    return "  refs:\n" + "".join(f"    {service}: {ref}\n" for service, ref in refs.items())
+
+
 def _settings(description: Description, name: str) -> str:
     services = ", ".join(description.services)
     return (
@@ -217,8 +224,7 @@ def _settings(description: Description, name: str) -> str:
         f"tls: {description.tls}\n"
         "templates:\n"
         "  source: https://github.com/ifdd-de\n"
-        f"  ref: {description.ref}\n"
-        f"services: [{services}]\n"
+        f"  ref: {description.ref}\n" + _refs(description.refs) + f"services: [{services}]\n"
         "workdir: work\n"
         "persist: state\n"
         f"wf_git: {description.wf_git}\n"

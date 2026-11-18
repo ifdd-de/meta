@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git reference of the templates (empty: the one of config/demo)"
+        description: "Git reference of all templates (empty: the references of config/demo)"
         required: false
         default: ""
 
@@ -56,8 +56,11 @@ jobs:
         env:
           REF: ${{ inputs.ref }}
         run: |
+          # The templates block of the demo, or one reference for all templates.
           if [ -z "$REF" ]; then
-            REF=$(python -c 'import yaml; print(yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]["ref"])')
+            TEMPLATES=$(python -c 'import json, yaml; print(json.dumps(yaml.safe_load(open("config/demo/installation.yaml"))["templates"]))')
+          else
+            TEMPLATES=$(python -c 'import json, sys; print(json.dumps({"ref": sys.argv[1]}))' "$REF")
           fi
           # Names with a dot: Java clients (Kestra) send no SNI for names without one,
           # and the production proxy refuses handshakes without SNI (sniStrict).
@@ -67,8 +70,7 @@ jobs:
             suffix: ci.test
           tls: local-ca
           services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
-          templates:
-            ref: $REF
+          templates: $TEMPLATES
           EOF
           ifdd-meta compile ci-run/installation.yaml
           ifdd-meta --settings "$SETTINGS" config check
