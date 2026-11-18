@@ -1,11 +1,11 @@
 """A few calls of the Keycloak admin API, for ``ifdd-meta keycloak`` and the tests.
 
 Login as the admin of the realm master (``admin-cli``, password grant) with the
-user and password of ``keycloak/.env``. Only service clients (client
-credentials, RFC 9700) are created here; the logic follows the former
-``.adm_tools/keycloak_add_client.py``: roles go to the service account and,
-because ``fullScopeAllowed`` is off, into the scope mapping as well. Secrets are
-never printed. Standard library only.
+user and password of ``keycloak/.env``. Service clients (client credentials,
+RFC 9700) follow the former ``.adm_tools/keycloak_add_client.py``: roles go to
+the service account and, because ``fullScopeAllowed`` is off, into the scope
+mapping as well. Users get a password, groups, realm and client roles.
+Secrets and passwords are never printed. Standard library only.
 """
 
 from __future__ import annotations
@@ -171,18 +171,7 @@ class Admin:
         """Create a service client; returns its internal id. Fails if it exists."""
         if self.client_uuid(client_id):
             raise KeycloakError(f"client {client_id} exists already")
-        for owner in roles:
-            if owner in BLOCKED_ROLE_CLIENTS:
-                raise KeycloakError(f"roles of {owner} are blocked")
-        resolved = {
-            owner: [
-                self.ensure_client_role(owner, role)
-                if create_roles
-                else self._existing_role(owner, role)
-                for role in names
-            ]
-            for owner, names in roles.items()
-        }
+        resolved = self._resolve_roles(roles, create_roles)
         scope_ids = self._scope_ids(list(default_scopes))
         self.call(
             "POST",
@@ -214,6 +203,63 @@ class Admin:
             raise
         return uuid
 
+    def user_uuid(self, username: str) -> str | None:
+        name = urllib.parse.quote(username)
+        found, _ = self.call("GET", f"/users?username={name}&exact=true")
+        return found[0]["id"] if found else None
+
+    def add_user(
+        self,
+        username: str,
+        password: str,
+        *,
+        groups: list[str] = (),
+        realm_roles: list[str] = (),
+        roles: dict[str, list[str]] | None = None,
+        create_roles: bool = False,
+        temporary: bool = False,
+    ) -> str:
+        """Create an enabled user with a password; returns its id. Fails if it exists.
+
+        The user gets a verified example address and a name, so the user
+        profile of Keycloak asks for nothing at the first login.
+        """
+        if self.user_uuid(username):
+            raise KeycloakError(f"user {username} exists already")
+        resolved = self._resolve_roles(roles or {}, create_roles)
+        group_ids = [self._group_id(name) for name in groups]
+        realm = [self._realm_role(name) for name in realm_roles]
+        self.call(
+            "POST",
+            "/users",
+            {
+                "username": username,
+                "enabled": True,
+                "email": f"{username}@example.org",
+                "emailVerified": True,
+                "firstName": username,
+                "lastName": "ifdd-meta",
+                "credentials": [{"type": "password", "value": password, "temporary": temporary}],
+            },
+        )
+        uuid = self.user_uuid(username)
+        try:
+            for group_id in group_ids:
+                self.call("PUT", f"/users/{uuid}/groups/{group_id}")
+            if realm:
+                self.call("POST", f"/users/{uuid}/role-mappings/realm", realm)
+            for owner, representations in resolved.items():
+                owner_uuid = self._require_client(owner)
+                mappings = f"/users/{uuid}/role-mappings/clients/{owner_uuid}"
+                self.call("POST", mappings, representations)
+        except KeycloakError:
+            self.call("DELETE", f"/users/{uuid}")
+            raise
+        return uuid
+
+    def delete_user(self, uuid: str) -> None:
+        self.call("DELETE", f"/users/{uuid}")
+
     def client_secret(self, uuid: str) -> str:
         answer, _ = self.call("GET", f"/clients/{uuid}/client-secret")
         return answer["value"]
@@ -234,6 +280,26 @@ class Admin:
     def _existing_role(self, client_id: str, role: str) -> dict:
         owner = self._require_client(client_id)
         found, _ = self.call("GET", f"/clients/{owner}/roles/{urllib.parse.quote(role, safe='')}")
+        return found
+
+    def _resolve_roles(self, roles: dict[str, list[str]], create: bool) -> dict[str, list[dict]]:
+        """Representations of client roles; missing ones are created with ``create``."""
+        for owner in roles:
+            if owner in BLOCKED_ROLE_CLIENTS:
+                raise KeycloakError(f"roles of {owner} are blocked")
+        lookup = self.ensure_client_role if create else self._existing_role
+        return {owner: [lookup(owner, role) for role in names] for owner, names in roles.items()}
+
+    def _group_id(self, name: str) -> str:
+        """Id of a top-level group with exactly this name."""
+        found, _ = self.call("GET", f"/groups?search={urllib.parse.quote(name)}&exact=true")
+        for group in found or []:
+            if group["name"] == name:
+                return group["id"]
+        raise KeycloakError(f"group {name} not found")
+
+    def _realm_role(self, name: str) -> dict:
+        found, _ = self.call("GET", f"/roles/{urllib.parse.quote(name, safe='')}")
         return found
 
     def _scope_ids(self, names: list[str]) -> list[str]:

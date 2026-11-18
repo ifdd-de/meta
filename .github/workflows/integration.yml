@@ -40,7 +40,11 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e .
+        run: |
+          pip install -e ".[browser]"
+          # Chromium with its system libraries; certutil puts the local CA into its NSS database.
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends libnss3-tools
 
       - name: Runner before the run
         run: |
@@ -109,7 +113,9 @@ jobs:
         env:
           # Writes test data (a fresh installation that is thrown away afterwards).
           IFDD_META_TESTS: write
-        run: ifdd-meta --settings "$SETTINGS" test -v --junit ci-run/artefacts/junit.xml
+        run: >-
+          ifdd-meta --settings "$SETTINGS" test -v --junit ci-run/artefacts/junit.xml
+          --screenshots ci-run/artefacts/screenshots
 
       - name: Runner after the run
         if: always()

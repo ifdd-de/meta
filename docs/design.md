@@ -129,7 +129,8 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `build` | images of all or selected services | images |
 | `up` / `down` | start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
 | `status`, `logs` | state of all services; logs into a directory (CI artefacts) | nothing / log files |
-| `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown. `add-user` and `add-context-role` follow | realm |
+| `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown | realm |
+| `keycloak add-user` | a user with a generated password (new file, 0600), groups, realm roles and client roles; `--temporary` asks for a new password at the first login. Context patterns: `--role ifdd:<pattern> --create-roles`, so there is no `add-context-role` | realm |
 | `demo load` | demo user and the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
 | `test` | integration tests against the running installation (section 8); data only with the setting `tests: write` | test data |
 | `docs render` | the instance chapter (former `.adm_docs`) with the same variables | output directory |
@@ -151,7 +152,7 @@ and prints the last 20 lines of the log. `--verbose` shows everything. Exit code
 | unit | pytest with fakes for `cruft`, `docker` and `git` | the tool itself, without containers |
 | plumbing | pytest | security headers and CSP of every route, dashboard of the proxy behind a password |
 | API | pytest + HTTP client (standard library), tokens by client credentials | Keycloak discovery and the service clients · be: 401 without token, write and read, unchanged write, valid time (`at`), domain contexts hidden, refused and filtered for a client without their pattern, CORS for the ui only · ts-api: write and read the latest sample, 422 for a wrong unit or value, read and write roles, 403 for a foreign store · schema/type/unit: JSON-LD, CORS `*` · ct pipelines into be (again: no new documents) and ts-api · wf: a flow goes to the Git server and is removed again · Grafana data sources healthy |
-| browser | Playwright (Chromium) | login through Keycloak (PKCE), ui shows the tabs, oauth2-proxy in front of wf |
+| browser | Playwright (Chromium), extra `ifdd-meta[browser]` | login through Keycloak for two temporary users: a reader sees and loads the aspects in the ui, is a Grafana Viewer and is refused by oauth2-proxy in front of wf; a member of the wf group gets into wf, sees no aspects and is refused by Grafana (no realm role). Chromium trusts the local CA through an NSS database in a temporary HOME; screenshots of failures, no traces (they record passwords) |
 | security | `tools-pentest` (passive, outside view) | later |
 | upgrade | previous release → demo data → `update` → checks again | later |
 

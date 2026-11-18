@@ -25,6 +25,9 @@ class FakeKeycloak:
             "u-rm": {"clientId": "realm-management", "roles": {"manage-users": {}}},
         }
         self.scopes = {"s-ro": "ifdd_nodes_ro", "s-roles": "roles"}
+        self.groups = {"g-readers": "ifdd_nodes_readers", "g-wf": "ifdd_wf_admins"}
+        self.realm_roles = {"readonly", "admin"}
+        self.users: dict[str, dict] = {}
         self.calls: list[tuple[str, str]] = []
         self.fail: str | None = None  # regex of a path that answers 500
         self.mappings: list[tuple[str, str, list[str]]] = []
@@ -94,10 +97,44 @@ class FakeKeycloak:
             return 204, None
         return 404, {"error": "unknown"}
 
-    def users(self, method, path, body):
-        match = re.fullmatch(rf"/admin/realms/{REALM}/users/[^/]+/role-mappings/clients/(.+)", path)
-        if match and method == "POST":
-            self.mappings.append(("user", match.group(1), [r["name"] for r in body]))
+    def user_calls(self, method, path, query, body):
+        prefix = f"/admin/realms/{REALM}"
+        if path == f"{prefix}/users" and method == "GET":
+            name = query.get("username", [None])[0]
+            assert query.get("exact") == ["true"]
+            return 200, [{"id": i, "username": u["username"]} for i, u in self.users.items()
+                         if u["username"] == name]  # fmt: skip
+        if path == f"{prefix}/users" and method == "POST":
+            self.users[f"user-{len(self.users)}"] = {**body, "groups": [], "realm": []}
+            return 201, None
+        if path == f"{prefix}/groups":
+            name = query.get("search", [None])[0]
+            return 200, [{"id": i, "name": n} for i, n in self.groups.items() if name in n]
+        role = re.fullmatch(rf"{prefix}/roles/(.+)", path)
+        if role:
+            name = urllib.parse.unquote(role.group(1))
+            return (200, {"name": name}) if name in self.realm_roles else (404, {"error": "no"})
+        match = re.fullmatch(rf"{prefix}/users/([^/]+)(/.*)?", path)
+        if not match:
+            return None
+        user, rest = self.users.get(match.group(1)), match.group(2) or ""
+        clients = re.fullmatch(r"/role-mappings/clients/(.+)", rest)
+        if clients and method == "POST":  # users and service accounts of clients
+            if self.fail and re.search(self.fail, path):
+                return 500, {"error": "injected"}
+            self.mappings.append(("user", clients.group(1), [r["name"] for r in body]))
+            return 204, None
+        if user is None:
+            return 404, {"error": "no user"}
+        if rest == "" and method == "DELETE":
+            del self.users[match.group(1)]
+            return 204, None
+        group = re.fullmatch(r"/groups/(.+)", rest)
+        if group and method == "PUT":
+            user["groups"].append(self.groups[group.group(1)])
+            return 204, None
+        if rest == "/role-mappings/realm" and method == "POST":
+            user["realm"] += [r["name"] for r in body]
             return 204, None
         return None
 
@@ -119,7 +156,9 @@ def fake():
             ):
                 status, payload = 401, {"error": "no admin token"}
             else:
-                users = state.users(self.command, url.path, body)
+                users = state.user_calls(
+                    self.command, url.path, urllib.parse.parse_qs(url.query), body
+                )
                 status, payload = users or state.answer(
                     self.command, url.path, urllib.parse.parse_qs(url.query), body or {}
                 )
@@ -211,3 +250,45 @@ def test_created_roles_can_be_removed_again(fake):
         api.delete_client_role(owner, role)
     assert set(fake.clients["u-ifdd"]["roles"]) == {"ifdd_nodes_ro", "ifdd_nodes_rw"}
     assert uuid not in fake.clients
+
+
+def test_add_user_with_password_groups_and_roles(fake):
+    api = admin(fake)
+    uuid = api.add_user(
+        "reader",
+        "pw-of-reader",
+        groups=["ifdd_nodes_readers"],
+        realm_roles=["readonly"],
+        roles={"ifdd": ["ifdd_nodes_ro"]},
+    )
+    user = fake.users[uuid]
+    assert (user["username"], user["enabled"], user["emailVerified"]) == ("reader", True, True)
+    assert user["email"] and user["firstName"] and user["lastName"]  # no profile form at login
+    password = {"type": "password", "value": "pw-of-reader", "temporary": False}
+    assert user["credentials"] == [password]
+    assert (user["groups"], user["realm"]) == (["ifdd_nodes_readers"], ["readonly"])
+    assert fake.mappings == [("user", "u-ifdd", ["ifdd_nodes_ro"])]
+    api.delete_user(uuid)
+    assert fake.users == {}
+
+
+def test_add_user_checks_before_it_creates(fake):
+    api = admin(fake)
+    for kwargs, message in [
+        ({"groups": ["ifdd_nodes"]}, "group ifdd_nodes not found"),  # only an exact name
+        ({"realm_roles": ["superuser"]}, "HTTP 404"),
+        ({"roles": {"realm-management": ["manage-users"]}}, "are blocked"),
+    ]:
+        with pytest.raises(keycloak.KeycloakError, match=message):
+            api.add_user("probe", "pw", **kwargs)
+    assert fake.users == {}
+    api.add_user("probe", "pw")
+    with pytest.raises(keycloak.KeycloakError, match="exists already"):
+        api.add_user("probe", "pw")
+
+
+def test_a_failed_role_mapping_removes_the_new_user(fake):
+    fake.fail = r"/users/.*/role-mappings/clients/"
+    with pytest.raises(keycloak.KeycloakError, match="HTTP 500"):
+        admin(fake).add_user("probe", "pw", roles={"ifdd": ["ifdd_nodes_ro"]})
+    assert fake.users == {}
