@@ -32,7 +32,8 @@ release follows the first successful integration run.
   `compile` adds the host to the internal hosts, `hosts.txt` and
   `ifdd_wf_git_url`; `create` writes its Compose project; `up` starts it before
   wf and creates user, repository (first commit on the branch) and token
-  (into `wf/secrets/kestra.env`), never showing the token. `wf_git: external`
+  (scopes `write:repository,write:user`; into `wf/secrets/kestra.env`), never
+  showing the token. `wf_git: external`
   keeps `IFDD_META_WF_GIT_TOKEN` and the overrides.
 - Integration run: wf starts too; checks of `https://wf/` (login gate) and
   `https://git/api/healthz`.

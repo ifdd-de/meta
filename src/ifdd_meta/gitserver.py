@@ -26,7 +26,10 @@ DIRECTORY = "git"
 #: Upstream image (Gitea, rootless); checked against the v1.27.3 sources.
 IMAGE = "gitea/gitea:1.27.3-rootless"
 SERVICE = "gitea"
-TOKEN_SCOPES = "write:repository"
+#: The token of wf. write:user as well, because the whole /user group of the API
+#: (and so POST /user/repos) requires the user scope (routers/api/v1/api.go, v1.27.3).
+#: The user owns nothing but the repository of the flows.
+TOKEN_SCOPES = "write:repository,write:user"
 
 
 def prepare(workdir: Path, host: str, network: str, run: Run) -> Path:
