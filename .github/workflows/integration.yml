@@ -119,6 +119,10 @@ jobs:
           cp -r ci-run/work/logs ci-run/artefacts/ifdd-meta 2>/dev/null || true
           python tools/ci/scrub_secrets.py ci-run/work ci-run/artefacts
 
+      - name: Error lines of the containers
+        if: failure()
+        run: python tools/ci/show_errors.py ci-run/work ci-run/artefacts/containers
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
