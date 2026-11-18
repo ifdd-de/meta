@@ -5,7 +5,7 @@ Two temporary users cover the checks and their counter-checks:
 - reader: groups ifdd_nodes_readers and ifdd_ctx_ifdd.de, realm role readonly.
   The ui shows the aspects and loads a list from be; Grafana lets in a
   Viewer; oauth2-proxy refuses wf (403).
-- wf admin: only the wf group. The ui shows no aspects; Grafana refuses the
+- wf admin: only the wf group. The ui shows a hint and no aspects; Grafana refuses the
   login (no realm role, role_attribute_strict); wf lets in.
 
 Needs ``ifdd-meta[browser]`` and ``python -m playwright install chromium``.
@@ -33,6 +33,8 @@ sync_api = pytest.importorskip(
 )
 
 READERS = ["ifdd_nodes_readers", "ifdd_ctx_ifdd.de"]
+#: English text of the ui's hint without a read role (ui 26.11.2; the context is en-US).
+NO_READ_ROLE = "without the right to read"
 TIMEOUT = 30_000  # ms
 
 
@@ -131,14 +133,17 @@ def test_ui_reader_sees_and_loads_the_aspects(installation, users, page, ui):
     login(page, ui, users["reader"], ui)
     products = page.locator('a[href$="/products"]')
     products.first.wait_for()
+    hint = page.get_by_role("status").filter(has_text=NO_READ_ROLE)
+    assert hint.count() == 0, "hint without a read role shown to a reader"
     with page.expect_response(lambda r: r.url.startswith(f"{be}/products")) as answer:
         products.first.click()
     assert answer.value.status == 200, f"be answered HTTP {answer.value.status}"
 
 
-def test_ui_without_read_role_shows_no_aspects(users, page, ui):
+def test_ui_without_read_role_shows_a_hint_and_no_aspects(users, page, ui):
     login(page, ui, users["wf"], ui)
-    page.wait_for_load_state("networkidle")
+    # The hint appears once the permissions are known, so the menu is complete too.
+    page.get_by_role("status").filter(has_text=NO_READ_ROLE).wait_for()
     found = page.locator('a[href$="/products"]').count()
     assert found == 0, "aspects shown without a read role"
 

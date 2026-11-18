@@ -28,6 +28,8 @@ class FakeKeycloak:
         self.groups = {"g-readers": "ifdd_nodes_readers", "g-wf": "ifdd_wf_admins"}
         self.realm_roles = {"readonly", "admin"}
         self.users: dict[str, dict] = {}
+        self.admin_token = ADMIN_TOKEN
+        self.logins = 0
         self.calls: list[tuple[str, str]] = []
         self.fail: str | None = None  # regex of a path that answers 500
         self.mappings: list[tuple[str, str, list[str]]] = []
@@ -39,7 +41,9 @@ class FakeKeycloak:
             return 500, {"error": "injected"}
         if path == "/realms/master/protocol/openid-connect/token":
             if body.get("username") == ["admin"] and body.get("password") == ["pw"]:
-                return 200, {"access_token": ADMIN_TOKEN}
+                self.logins += 1
+                self.admin_token = f"{ADMIN_TOKEN}-{self.logins}"
+                return 200, {"access_token": self.admin_token}
             return 401, {"error": "invalid_grant"}
         if path == f"/realms/{REALM}/protocol/openid-connect/token":
             for client in self.clients.values():
@@ -152,7 +156,7 @@ def fake():
             else:
                 body = json.loads(raw) if raw else None
             if url.path.startswith("/admin/") and (
-                self.headers.get("Authorization") != f"Bearer {ADMIN_TOKEN}"
+                self.headers.get("Authorization") != f"Bearer {state.admin_token}"
             ):
                 status, payload = 401, {"error": "no admin token"}
             else:
@@ -292,3 +296,14 @@ def test_a_failed_role_mapping_removes_the_new_user(fake):
     with pytest.raises(keycloak.KeycloakError, match="HTTP 500"):
         admin(fake).add_user("probe", "pw", roles={"ifdd": ["ifdd_nodes_ro"]})
     assert fake.users == {}
+
+
+def test_an_expired_admin_token_is_renewed_once(fake):
+    api = admin(fake)
+    fake.admin_token = "expired"  # the token api holds is no longer accepted
+    assert api.client_uuid("ifdd") == "u-ifdd"
+    assert fake.logins == 2
+    fake.admin_token = "expired"
+    fake.fail = r"^/admin/"  # still refused after the new login: the error surfaces
+    with pytest.raises(keycloak.KeycloakError, match="HTTP 500"):
+        api.client_uuid("ifdd")
