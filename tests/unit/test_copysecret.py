@@ -62,3 +62,17 @@ def test_errors_never_contain_the_value(tmp_path):
     with pytest.raises(copysecret.SecretError) as error:
         copysecret.write_env(env, "A", "top secret")
     assert "top secret" not in str(error.value)
+
+
+def test_set_env_creates_replaces_and_adds(tmp_path):
+    env = tmp_path / ".env"
+    copysecret.set_env(env, "A", "one")
+    assert env.read_text() == "A=one\n" and mode(env) == 0o600
+    copysecret.set_env(env, "A", "two")
+    assert env.read_text() == "A=two\n"
+    env.write_text("# comment\nB=x")  # no newline at the end
+    env.chmod(0o640)
+    copysecret.set_env(env, "A", "three")
+    assert env.read_text() == "# comment\nB=x\nA=three\n" and mode(env) == 0o640
+    with pytest.raises(copysecret.SecretError, match="would need quotes"):
+        copysecret.set_env(env, "A", "with space")

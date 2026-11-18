@@ -10,12 +10,15 @@ operator. The design, with everything planned, is in
 [`docs/design.md`](docs/design.md).
 
 **Status:** in development. Available so far: `compile`, `config show`, `config check`,
-`create`, `build`, `up`, `down`, `status`, `logs`.
+`create`, `local-setup`, `build`, `up`, `down`, `status`, `logs`, `demo load`, `test`,
+`keycloak add-client`, `keycloak add-user`.
+
+A test installation on a Mac (Colima): [`docs/local-macos-colima.md`](docs/local-macos-colima.md).
 
 ## Requirements
 
 - Python 3.11 or newer and [uv](https://docs.astral.sh/uv/) (or pip)
-- Git
+- Git, with `user.name` and `user.email` set (every instance becomes a Git repository)
 - Docker with Compose, for the commands that build and run services
 
 ## Quick start
@@ -43,7 +46,7 @@ uv run ifdd-meta --settings config/demo/ifdd-meta.yaml config check
 | `cookiecutter_all.yaml` | every template variable except the versions, with comments |
 | `ifdd-meta.yaml` | settings of the tool |
 | `.env.example` | names of the secrets the tool needs, without values |
-| `hosts.txt` | host names for DNS records, or a line for `/etc/hosts` with short names |
+| `hosts.txt` | host names for DNS records, or a block for `/etc/hosts` (short names or a local CA) |
 
 The description sets the installation name, a host suffix (empty: short names
 `id`, `rest`, `ui`, …), the TLS mode (`local-ca`, `letsencrypt`, `own`), a
@@ -78,6 +81,28 @@ existing instance. Run it as a normal user: the hooks of keycloak and ts refuse
 root. The console shows one line per step; the full output is in
 `<workdir>/logs/` (mode 0600), `--verbose` shows it as well.
 
+At the end every instance becomes a local Git repository with one commit and no
+remote, so that `cruft update` can merge later template changes into it. Git
+takes name and e-mail from your configuration only. The `.gitignore` of the
+templates keeps secrets, certificates and data out; if a file that looks like a
+secret (`.env`, files in `secrets/`, keys) would be committed nevertheless,
+`create` stops and leaves that instance without a repository. Nothing is pushed
+anywhere: configuration and data stay on the machine.
+
+## Host names and the local CA
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml local-setup [--remove]
+```
+
+On a test machine (`tls: local-ca`, or short names) the host names go into
+`/etc/hosts` and the local CA into the trust store of the operating system
+(macOS: the System keychain; Debian/Ubuntu: `update-ca-certificates`). Both need
+root, so `local-setup` only prints the commands with the paths of this
+installation; nothing is run. The `/etc/hosts` block is marked with the
+installation name. `--remove` prints the commands that undo it; run them before
+`down --purge`, which deletes the CA file.
+
 ## Build, start, stop
 
 ```bash
@@ -100,9 +125,24 @@ and creates the user, the repository and the token for wf. With
 `IFDD_META_WF_GIT_TOKEN` (environment or `.env`) goes into wf as
 `SECRET_GIT_TOKEN`.
 
+## Demo data
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml demo load
+```
+
+Creates the user `ifdd-demo` (groups: readers, writers, privileged, the wf
+group with wf, and the context root), or sets its password and adds missing
+groups, and loads the fake energy grid and its time series with the ct pipelines
+`generate-energy-grid` and `generate-time-series` (fixed seed: a second run adds
+nothing). The password is `IFDD_META_DEMO_PASSWORD` from the environment or the
+`.env` next to the settings; without one a new password is written into that
+`.env` (mode 0600). It is never shown. The services must be running.
+
 The workflow `integration.yml` runs `create`, `build` and `up` on a fresh GitHub
 runner with the real images and checks that every service answers through the
-proxy, then runs `ifdd-meta test` with `tests: write`; the JUnit report, logs,
+proxy, runs `local-setup` (its printed commands), `demo load` twice, then
+`ifdd-meta test` with `tests: write`; the JUnit report, logs,
 image digests and the use of disk and memory are kept as artefacts.
 
 ## Test
@@ -118,12 +158,16 @@ wf. Tests that write run only with the setting `tests: write`
 (`IFDD_META_TESTS=write`); the default `read` leaves the data alone. Tests of a
 service that is not installed are skipped.
 
-The browser tests (logins into ui, Grafana and wf through Keycloak) need the
-extra `browser` and Chromium; with the local CA also `certutil`
-(Debian/Ubuntu: `libnss3-tools`). Without Playwright they are skipped.
+The browser tests (logins into ui, Grafana and wf through Keycloak, and the
+demo user after `demo load`) need the extra `browser` and Chromium. On Linux
+they trust the local CA through their own NSS database, which needs `certutil`
+(Debian/Ubuntu: `libnss3-tools`). On macOS Chromium uses the System keychain:
+without the local CA in it (`local-setup`) the browser tests are skipped with a
+hint. Without Playwright they are skipped as well.
 
 ```bash
-uv sync --extra browser && uv run python -m playwright install --with-deps chromium
+uv sync --extra browser && uv run python -m playwright install --with-deps chromium  # Linux
+uv sync --extra browser && uv run python -m playwright install chromium              # macOS
 uv run ifdd-meta --settings path/to/ifdd-meta.yaml test --screenshots shots/
 ```
 

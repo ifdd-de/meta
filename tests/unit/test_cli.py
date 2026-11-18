@@ -175,3 +175,27 @@ def test_add_user_removes_the_password_file_if_keycloak_refuses(tmp_path, monkey
     assert result.exit_code == 1
     assert "exists already" in result.output
     assert not (tmp_path / "taken.password").exists()
+
+
+def test_local_setup_prints_commands_and_reports_errors(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    description = tmp_path / "installation.yaml"
+    description.write_text("installation: nb\nhosts:\n  suffix: demo.test\n")
+    assert runner.invoke(app, ["compile", str(description)]).exit_code == 0
+    result = runner.invoke(app, ["local-setup"])
+    assert result.exit_code == 0, result.output
+    assert f"< {tmp_path / 'hosts.txt'} > /dev/null" in result.output
+    assert "No proxy instance yet" in result.output
+    (tmp_path / "hosts.txt").unlink()
+    result = runner.invoke(app, ["local-setup", "--remove"])
+    assert result.exit_code == 1 and "hosts.txt missing" in result.output
+
+
+def test_demo_load_needs_instances(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\n")
+    result = runner.invoke(app, ["demo", "load"])
+    assert result.exit_code == 1
+    assert "no keycloak instance" in result.output

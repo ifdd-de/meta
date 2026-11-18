@@ -72,7 +72,13 @@ def test_without_wf_there_is_no_login_gate(tmp_path):
     # no host behind the gate; keycloak accepts an empty value since 26.11.2
     assert result.values["ifdd_keycloak_proxy_gate_hosts"] == ""
     assert result.values["ifdd_proxy_internal_hosts"] == "id, rest, ui"
-    assert result.files["hosts.txt"].splitlines()[-1] == "127.0.0.1 id rest ui"
+    lines = result.files["hosts.txt"].splitlines()
+    assert (lines[0], lines[-2], lines[-1]) == (
+        "# BEGIN ifdd-meta x",
+        "127.0.0.1 id rest ui",
+        "# END ifdd-meta x",
+    )
+    assert all(line.startswith("#") for line in lines[1:-2])
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
 
 
@@ -155,7 +161,8 @@ def test_local_git_server_for_wf(tmp_path):
         "wf.a.example.org",
         "git.a.example.org",
     ]
-    assert result.files["hosts.txt"].splitlines()[-1] == "git.a.example.org"
+    line = result.files["hosts.txt"].splitlines()[-2]
+    assert line.endswith(" wf.a.example.org git.a.example.org")
     generated = yaml.safe_load(result.files["ifdd-meta.yaml"])
     assert (generated["wf_git"], generated["git_host"]) == ("local", "git.a.example.org")
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
@@ -182,3 +189,25 @@ def test_warning_for_short_names_with_wf(tmp_path):
     assert not compiler.compile_description(describe(tmp_path, with_suffix)).warnings
     without_wf = "installation: x\nservices: [proxy, be]\n"
     assert not compiler.compile_description(describe(tmp_path, without_wf)).warnings
+
+
+def test_local_ca_with_a_suffix_gives_an_etc_hosts_block(tmp_path):
+    """A test machine with names like id.demo.test: no DNS, a block for /etc/hosts."""
+    text = "installation: notebook\nhosts:\n  suffix: demo.test\ntls: local-ca\n"
+    lines = compiler.compile_description(describe(tmp_path, text)).files["hosts.txt"].splitlines()
+    begin, end = compiler.hosts_markers("notebook")
+    assert lines[0] == begin and lines[-1] == end  # the whole file is the block
+    names = lines[-2].split()
+    assert names[0] == "127.0.0.1"
+    assert names[1:] == [
+        f"{label}.demo.test"
+        for label in ("id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "git")
+    ]
+    assert "proxy.demo.test" not in names  # the dashboard has no host entry
+
+
+def test_public_names_with_own_certificates_give_dns_records(tmp_path):
+    text = "installation: x\nhosts:\n  suffix: a.example.org\ntls: own\n"
+    hosts = compiler.compile_description(describe(tmp_path, text)).files["hosts.txt"]
+    assert "127.0.0.1" not in hosts and "BEGIN" not in hosts
+    assert hosts.splitlines()[-1] == "git.a.example.org"

@@ -33,7 +33,11 @@ FILES = {
 }
 
 
-def make_template(root: Path, service: str) -> None:
+#: Like the templates: secrets, generated configuration and certificates stay out of Git.
+GITIGNORE = ".env\nsecrets/*\n!secrets/.gitkeep\ncerts/*\n!certs/README.md\n"
+
+
+def make_template(root: Path, service: str, gitignore: str = GITIGNORE) -> None:
     key = service.replace("-", "_")
     repo = root / service
     body = repo / f"{{{{cookiecutter.ifdd_{key}_prj_slug}}}}"
@@ -47,6 +51,8 @@ def make_template(root: Path, service: str) -> None:
         )
     )
     (body / "README.md").write_text(service)
+    if gitignore:
+        (body / ".gitignore").write_text(gitignore)
     for name, text in FILES.get(service, {}).items():
         path = body / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -54,9 +60,25 @@ def make_template(root: Path, service: str) -> None:
         if name.endswith(".sh"):
             path.chmod(0o755)
     subprocess.run([*GIT, "init", "-q", "-b", "main", str(repo)], check=True)
-    subprocess.run([*GIT, "-C", str(repo), "add", "."], check=True)
+    subprocess.run([*GIT, "-C", str(repo), "add", "--force", "."], check=True)
     subprocess.run([*GIT, "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
     subprocess.run([*GIT, "-C", str(repo), "tag", "v1"], check=True)
+
+
+@pytest.fixture(autouse=True)
+def git_identity(tmp_path_factory, monkeypatch):
+    """A global Git configuration with name and e-mail, as on the operator's machine."""
+    config = tmp_path_factory.mktemp("git") / "config"
+    config.write_text("[user]\n\tname = Test\n\temail = test@example.org\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    return config
+
+
+def git(path: Path, *argv: str) -> str:
+    return subprocess.run(
+        ["git", *argv], cwd=path, capture_output=True, text=True, check=True
+    ).stdout
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +127,18 @@ def test_create_everything(tmp_path, templates):
     assert base64.b64decode(kestra).decode() == "api1"
     assert lines[0] == "==> Creating proxy (v1)"
     assert not any("proxy1" in line or "api1" in line for line in lines)
+    # every instance is a local Git repository: one commit, clean, no remote
+    for service, directory in state.items():
+        path = work / directory
+        assert git(path, "log", "--format=%an <%ae>|%s").splitlines() == [
+            f"Test <test@example.org>|Create {service} from its template at v1"
+        ]
+        assert git(path, "status", "--porcelain") == ""
+        assert git(path, "remote") == ""
+        tracked = git(path, "ls-files").splitlines()
+        assert ".cruft.json" in tracked
+        assert not [name for name in tracked if create.secret_like(name)]
+    assert ".env" not in git(work / "keycloak", "ls-files").splitlines()
 
 
 def test_existing_instances_are_never_overwritten(tmp_path, templates):
@@ -168,3 +202,44 @@ def test_a_failing_template_stops_with_the_log(tmp_path, templates):
     with pytest.raises(StepError, match="failed with exit code") as error:
         run_create(settings)
     assert "last lines of" in str(error.value)
+
+
+def test_without_a_git_identity_nothing_is_created(tmp_path, templates, git_identity):
+    git_identity.write_text("")
+    settings = settings_for(tmp_path, templates, "services: [be]\n")
+    with pytest.raises(create.CreateError, match="git config --global user.name"):
+        run_create(settings)
+    assert not (settings["workdir"] / "backend").exists()
+
+
+def test_a_secret_the_gitignore_misses_is_not_committed(tmp_path):
+    root = tmp_path / "templates"
+    make_template(root, "keycloak", gitignore="")
+    settings = settings_for(tmp_path, root, "services: [keycloak]\n")
+    with pytest.raises(
+        create.CreateError, match=r"keycloak: .*would let these files into Git: \.env"
+    ):
+        run_create(settings)
+    assert not (settings["workdir"] / "keycloak" / ".git").exists()
+
+
+@pytest.mark.parametrize(
+    ("path", "secret"),
+    [
+        (".env", True),
+        ("sub/.env", True),
+        ("secrets/oidc_client_secret", True),
+        ("secrets/kestra.env", True),
+        ("certs/ca.key", True),
+        ("letsencrypt/acme.json", True),
+        ("secrets/dashboard.htpasswd", True),
+        ("secrets/README.md", False),
+        ("secrets/.gitkeep", False),
+        ("secrets/kestra.env.dist", False),
+        ("dotenv.dist", False),
+        ("certs/README.md", False),
+        ("realm/import/ifdd-realm.json", False),
+    ],
+)
+def test_secret_like_paths(path, secret):
+    assert create.secret_like(path) is secret
