@@ -22,6 +22,7 @@ import pytest
 from .settings import FIELDS, Settings
 
 SETTINGS_VARIABLE = "IFDD_META_TEST_SETTINGS"
+SCREENSHOTS_VARIABLE = "IFDD_META_TEST_SCREENSHOTS"
 
 
 def directory() -> Path:
@@ -55,21 +56,27 @@ def arguments(
     return args
 
 
-def environment(settings: Settings, cli: Mapping[str, Any]) -> dict[str, str]:
+def environment(
+    settings: Settings, cli: Mapping[str, Any], screenshots: Path | None = None
+) -> dict[str, str]:
     """The variables the tests need: the settings file and the command line values."""
     if settings.file is None:
         raise ValueError("the tests need a settings file (ifdd-meta.yaml or --settings)")
     variables = {SETTINGS_VARIABLE: str(settings.file.resolve())}
+    if screenshots:
+        variables[SCREENSHOTS_VARIABLE] = str(screenshots.resolve())
     for field in FIELDS:
         if cli.get(field.name) is not None and field.env:
             variables[field.env] = str(settings[field.name])  # resolved, e.g. absolute paths
     return variables
 
 
-def run(settings: Settings, cli: Mapping[str, Any], **options) -> int:
+def run(
+    settings: Settings, cli: Mapping[str, Any], screenshots: Path | None = None, **options
+) -> int:
     """Run the tests; returns pytest's exit code."""
     previous = dict(os.environ)
-    os.environ.update(environment(settings, cli))
+    os.environ.update(environment(settings, cli, screenshots))
     try:
         return int(pytest.main(arguments(**options)))
     finally:

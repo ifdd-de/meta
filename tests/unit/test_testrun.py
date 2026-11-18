@@ -33,6 +33,13 @@ def test_environment_names_the_file_and_passes_command_line_values(tmp_path):
     }
 
 
+def test_screenshots_directory_reaches_the_tests(tmp_path):
+    (tmp_path / "ifdd-meta.yaml").write_text("")
+    settings = load(settings_file=tmp_path / "ifdd-meta.yaml", cwd=tmp_path, environ={})
+    variables = testrun.environment(settings, {}, screenshots=tmp_path / "shots")
+    assert variables["IFDD_META_TEST_SCREENSHOTS"] == str(tmp_path / "shots")
+
+
 def test_environment_needs_a_settings_file(tmp_path):
     settings = load(cwd=tmp_path, environ={})
     with pytest.raises(ValueError, match="need a settings file"):

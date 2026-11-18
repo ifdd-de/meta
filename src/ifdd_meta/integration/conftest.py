@@ -131,18 +131,25 @@ def tokens(installation, ssl_context):
 
 
 @pytest.fixture(scope="session")
-def test_client(installation, ssl_context, writes):
+def admin(installation, writes) -> keycloak.Admin:
+    """The admin API of the realm (only for tests that write)."""
+    if not installation.has("keycloak"):
+        pytest.skip("no keycloak instance")
+    return keycloak.Admin.from_instance(
+        installation.paths["keycloak"],
+        installation.variables["ifdd_keycloak_realm"],
+        installation.ca_file,
+    )
+
+
+@pytest.fixture(scope="session")
+def test_client(installation, ssl_context, admin):
     """A service client with read and write roles, but only the ops patterns.
 
     Created through the admin API for this session and deleted afterwards,
     with the pattern roles the fixture had to create. Yields its access token.
     """
-    if not installation.has("keycloak"):
-        pytest.skip("no keycloak instance")
     variables = installation.variables
-    admin = keycloak.Admin.from_instance(
-        installation.paths["keycloak"], variables["ifdd_keycloak_realm"], installation.ca_file
-    )
     client_id = f"{TEST_CLIENT}-{uuid.uuid4().hex[:8]}"
     nodes_read = variables["ifdd_be_role_nodes_read"]
     roles = {
@@ -165,6 +172,14 @@ def test_client(installation, ssl_context, writes):
         admin.delete_client(client)
         for owner, role in admin.created_roles:
             admin.delete_client_role(owner, role)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Keeps the report of each phase on the test, e.g. for screenshots of failures."""
+    report = yield
+    setattr(item, f"report_{report.when}", report)
+    return report
 
 
 def bearer(token: str) -> dict[str, str]:

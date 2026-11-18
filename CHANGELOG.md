@@ -53,6 +53,11 @@ release follows the first successful integration run.
   data sources, ct pipelines, Git round trip of wf. Setting `tests`
   (`read` by default, `compile` writes it; `write` adds test data and a
   temporary service client with the pattern `ops.example.ifdd.de`).
+- Browser tests (Playwright, extra `browser`): logins through Keycloak into ui,
+  Grafana and wf with two temporary users, each check with its counter-check;
+  `ifdd-meta test --screenshots DIR` keeps screenshots of failures.
+- `ifdd-meta keycloak add-user`: user with a generated password (new 0600
+  file), groups, realm and client roles, `--temporary`.
 - `ifdd-meta keycloak add-client`: service client with client roles, scope
   mappings and default scopes through the admin API; secret into a new 0600 file.
 - pytest is a runtime dependency; the compose file of the Git server is package

@@ -117,6 +117,15 @@ wf. Tests that write run only with the setting `tests: write`
 (`IFDD_META_TESTS=write`); the default `read` leaves the data alone. Tests of a
 service that is not installed are skipped.
 
+The browser tests (logins into ui, Grafana and wf through Keycloak) need the
+extra `browser` and Chromium; with the local CA also `certutil`
+(Debian/Ubuntu: `libnss3-tools`). Without Playwright they are skipped.
+
+```bash
+uv sync --extra browser && uv run python -m playwright install --with-deps chromium
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml test --screenshots shots/
+```
+
 ## Add a service client
 
 ```bash
@@ -128,6 +137,17 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml keycloak add-client my-script
 The client gets client credentials only, no full scope, the roles in its service
 account and in its scope mapping. The secret goes into a new file with mode
 0600 and is never shown.
+
+## Add a user
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml keycloak add-user jane \
+    --group ifdd_nodes_readers --group ifdd_ctx_ifdd.de --realm-role readonly \
+    --password-file jane.password [--temporary]
+```
+
+The password is generated and written into a new file with mode 0600; it is
+never shown. `--temporary` makes Keycloak ask for a new one at the first login.
 
 ## Configuration
 

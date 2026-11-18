@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Annotated
 
@@ -266,14 +267,17 @@ def test_command(
         str | None, typer.Option("-k", help="Only the tests that match this pytest expression.")
     ] = None,
     exitfirst: Annotated[bool, typer.Option("-x", help="Stop at the first failure.")] = False,
+    screenshots: Annotated[
+        Path | None, typer.Option(help="Directory for screenshots of failed browser tests.")
+    ] = None,
     verbose: VerboseOption = False,
 ) -> None:
     """Test the running installation (pytest). Writes data only with the setting tests: write."""
     settings = _settings(ctx)
     try:
         code = testrun.run(
-            settings, ctx.obj["cli"], junit=junit, keyword=keyword, exitfirst=exitfirst,
-            verbose=verbose,
+            settings, ctx.obj["cli"], screenshots=screenshots, junit=junit, keyword=keyword,
+            exitfirst=exitfirst, verbose=verbose,
         )  # fmt: skip
     except ValueError as error:
         typer.echo(f"error: {error}", err=True)
@@ -281,11 +285,30 @@ def test_command(
     raise typer.Exit(code)
 
 
-def _role(value: str) -> tuple[str, str]:
-    owner, separator, role = value.partition(":")
-    if not (separator and owner and role):
-        raise typer.BadParameter(f"expected CLIENT:ROLE, got {value!r}", param_hint="--role")
-    return owner, role
+def _roles(values: list[str] | None) -> dict[str, list[str]]:
+    """CLIENT:ROLE values, grouped by client."""
+    roles: dict[str, list[str]] = {}
+    for value in values or []:
+        owner, separator, role = value.partition(":")
+        if not (separator and owner and role):
+            raise typer.BadParameter(f"expected CLIENT:ROLE, got {value!r}", param_hint="--role")
+        roles.setdefault(owner, []).append(role)
+    return roles
+
+
+def _new_file(path: Path) -> None:
+    if path.exists():
+        typer.echo(f"error: {path} exists already", err=True)
+        raise typer.Exit(1)
+
+
+RoleOption = Annotated[
+    list[str] | None,
+    typer.Option(help="CLIENT:ROLE, e.g. ifdd:ifdd_nodes_ro or ifdd:ops.example.ifdd.de."),
+]
+CreateRolesOption = Annotated[
+    bool, typer.Option(help="Create missing client roles (e.g. a new context pattern).")
+]
 
 
 @keycloak_app.command("add-client")
@@ -295,25 +318,16 @@ def keycloak_add_client(
     secret_file: Annotated[
         Path, typer.Option(help="New file (mode 0600) for the client secret; it is never shown.")
     ],
-    role: Annotated[
-        list[str] | None,
-        typer.Option(help="CLIENT:ROLE, e.g. ifdd:ifdd_nodes_ro or ifdd:ops.example.ifdd.de."),
-    ] = None,
+    role: RoleOption = None,
     default_scope: Annotated[
         list[str] | None, typer.Option(help="Default client scope, e.g. ifdd_nodes_ro.")
     ] = None,
-    create_roles: Annotated[
-        bool, typer.Option(help="Create missing client roles (e.g. a new context pattern).")
-    ] = False,
+    create_roles: CreateRolesOption = False,
 ) -> None:
     """Add a service client (client credentials) with client roles and scopes."""
     settings = _settings(ctx)
-    roles: dict[str, list[str]] = {}
-    for owner, name in map(_role, role or []):
-        roles.setdefault(owner, []).append(name)
-    if secret_file.exists():
-        typer.echo(f"error: {secret_file} exists already", err=True)
-        raise typer.Exit(1)
+    roles = _roles(role)
+    _new_file(secret_file)
     try:
         admin = keycloak.Admin.from_settings(settings)
         client = admin.add_service_client(
@@ -330,6 +344,50 @@ def keycloak_add_client(
     for created_owner, created_role in admin.created_roles:
         typer.echo(f"created role {created_role} of {created_owner}")
     typer.echo(f"created client {client_id}; secret in {secret_file}")
+
+
+@keycloak_app.command("add-user")
+def keycloak_add_user(
+    ctx: typer.Context,
+    username: Annotated[str, typer.Argument(help="Name of the new user.")],
+    password_file: Annotated[
+        Path,
+        typer.Option(help="New file (mode 0600) for the generated password; it is never shown."),
+    ],
+    group: Annotated[
+        list[str] | None, typer.Option(help="Group, e.g. ifdd_nodes_readers or ifdd_wf_admins.")
+    ] = None,
+    realm_role: Annotated[
+        list[str] | None, typer.Option(help="Realm role, e.g. readonly (Grafana Viewer).")
+    ] = None,
+    role: RoleOption = None,
+    create_roles: CreateRolesOption = False,
+    temporary: Annotated[
+        bool, typer.Option(help="The user has to change the password at the first login.")
+    ] = False,
+) -> None:
+    """Add a user with a generated password, groups, realm and client roles."""
+    settings = _settings(ctx)
+    roles = _roles(role)
+    _new_file(password_file)
+    password = secrets.token_urlsafe(18)
+    try:
+        admin = keycloak.Admin.from_settings(settings)
+        copysecret.write_file(password_file, password, new_mode=0o600)
+        try:
+            admin.add_user(
+                username, password, groups=group or [], realm_roles=realm_role or [],
+                roles=roles, create_roles=create_roles, temporary=temporary,
+            )  # fmt: skip
+        except keycloak.KeycloakError:
+            password_file.unlink()
+            raise
+    except (keycloak.KeycloakError, SecretError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    for created_owner, created_role in admin.created_roles:
+        typer.echo(f"created role {created_role} of {created_owner}")
+    typer.echo(f"created user {username}; password in {password_file}")
 
 
 def main() -> None:

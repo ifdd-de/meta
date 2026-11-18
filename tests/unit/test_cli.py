@@ -81,18 +81,26 @@ class FakeAdmin:
     def client_secret(self, uuid):
         return "generated-secret"
 
+    def add_user(self, username, password, **kwargs):
+        if username == "taken":
+            from ifdd_meta.keycloak import KeycloakError
+
+            raise KeycloakError("user taken exists already")
+        self.added.append((username, password, kwargs))
+        return "user-1"
+
     def delete_client(self, uuid):
         self.deleted.append(uuid)
 
 
-def add_client(tmp_path, monkeypatch, *args):
+def add_client(tmp_path, monkeypatch, *args, command="add-client"):
     from ifdd_meta import keycloak
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
     fake = FakeAdmin()
     monkeypatch.setattr(keycloak.Admin, "from_settings", classmethod(lambda cls, s: fake))
-    return fake, runner.invoke(app, ["keycloak", "add-client", *args])
+    return fake, runner.invoke(app, ["keycloak", command, *args])
 
 
 def test_add_client_writes_the_secret_only_into_the_file(tmp_path, monkeypatch):
@@ -135,3 +143,35 @@ def test_add_client_removes_the_client_if_the_secret_cannot_be_written(tmp_path,
     assert result.exit_code == 1
     assert "target directory missing" in result.output
     assert fake.deleted == ["uuid-1"]
+
+
+def test_add_user_writes_a_generated_password_only_into_the_file(tmp_path, monkeypatch):
+    fake, result = add_client(
+        tmp_path, monkeypatch, "reader", "--password-file", "reader.password",
+        "--group", "ifdd_nodes_readers", "--realm-role", "readonly",
+        "--role", "ifdd:ops.example.ifdd.de", "--create-roles", "--temporary",
+        command="add-user",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    [(username, password, options)] = fake.added
+    assert username == "reader" and len(password) >= 20
+    assert options == {
+        "groups": ["ifdd_nodes_readers"],
+        "realm_roles": ["readonly"],
+        "roles": {"ifdd": ["ops.example.ifdd.de"]},
+        "create_roles": True,
+        "temporary": True,
+    }
+    stored = tmp_path / "reader.password"
+    assert stored.read_text() == password
+    assert stored.stat().st_mode & 0o777 == 0o600
+    assert password not in result.output
+
+
+def test_add_user_removes_the_password_file_if_keycloak_refuses(tmp_path, monkeypatch):
+    fake, result = add_client(
+        tmp_path, monkeypatch, "taken", "--password-file", "taken.password", command="add-user"
+    )
+    assert result.exit_code == 1
+    assert "exists already" in result.output
+    assert not (tmp_path / "taken.password").exists()
