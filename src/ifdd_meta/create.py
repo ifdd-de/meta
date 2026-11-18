@@ -2,7 +2,9 @@
 
 Per service ``cruft create`` with the skip list and the chosen reference; then
 optional wheels, the local CA (TLS mode ``local-ca``) and the client secrets
-from ``keycloak/.env``. Existing instances are never overwritten.
+from ``keycloak/.env``. Existing instances are never overwritten. At the end
+every instance becomes a local Git repository (no remote) with a first commit,
+so that ``cruft update`` can merge later template changes.
 """
 
 from __future__ import annotations
@@ -10,9 +12,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 from collections.abc import Callable, Iterable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -76,6 +79,7 @@ def create(
             f"run as a normal user: the hooks of {', '.join(NO_ROOT)} refuse root "
             "(they write the user's ids for files on the host)"
         )
+    _require_git_identity(workdir)
     state = load_state(settings)
     existing = [s for s in services if s in state and (workdir / state[s]).exists()]
     if existing:
@@ -127,7 +131,64 @@ def create(
             _save_state(settings, state)
     else:
         _wf_git_token(settings, state, run)
+    for service in services:
+        _commit(workdir / state[service], service, settings.ref(service), run)
     return state
+
+
+#: Run git with the identity of the user's configuration only (no guessed address).
+GIT = ("git", "-c", "user.useConfigOnly=true")
+#: Files below secrets/ that templates keep in Git.
+SECRET_PLACEHOLDERS = frozenset({"README.md", ".gitkeep"})
+
+
+def _require_git_identity(directory: Path) -> None:
+    """Every instance becomes a Git repository; its first commit needs name and e-mail."""
+    directory = directory if directory.is_dir() else Path.cwd()
+    for variable in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
+        result = subprocess.run(
+            [*GIT, "var", variable], cwd=directory, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            raise CreateError(
+                "Git needs a name and an e-mail address for the first commit of every "
+                "instance: git config --global user.name '…'; "
+                "git config --global user.email '…'"
+            )
+
+
+def secret_like(path: str) -> bool:
+    """A tracked path that would put a secret into Git."""
+    parts = PurePosixPath(path).parts
+    name = parts[-1]
+    if name == ".env" or name.endswith((".key", ".pem", ".htpasswd")) or name == "acme.json":
+        return True
+    return (
+        "secrets" in parts[:-1] and name not in SECRET_PLACEHOLDERS and not name.endswith(".dist")
+    )
+
+
+def _commit(path: Path, service: str, ref: str, run: Run) -> None:
+    """Make the instance a local Git repository without a remote, for ``cruft update``.
+
+    The templates' .gitignore keeps secrets, certificates and data out; if a
+    secret-like file would be committed nevertheless, nothing is committed.
+    """
+    run.command([*GIT, "init", "-q", "-b", "main"], cwd=path)
+    run.command([*GIT, "add", "--all"], cwd=path)
+    listed = subprocess.run(
+        [*GIT, "ls-files", "-z"], cwd=path, capture_output=True, text=True, check=True
+    )
+    leaks = sorted(name for name in listed.stdout.split("\0") if name and secret_like(name))
+    if leaks:
+        shutil.rmtree(path / ".git")
+        raise CreateError(
+            f"{service}: the .gitignore of the template would let these files into Git: "
+            f"{', '.join(leaks)}; the instance stays without a Git repository"
+        )
+    message = f"Create {service} from its template at {ref}"
+    run.command([*GIT, "commit", "-q", "-m", message], cwd=path)
+    run.note(f"{service}: Git repository with the first commit")
 
 
 def _variables(settings: Settings) -> dict:

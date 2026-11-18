@@ -9,10 +9,12 @@ Two temporary users cover the checks and their counter-checks:
   login (no realm role, role_attribute_strict); wf lets in.
 
 Needs ``ifdd-meta[browser]`` and ``python -m playwright install chromium``.
-Chromium trusts the local CA through an NSS database in a temporary HOME
-(``certutil`` of libnss3-tools); the certificates are checked. Screenshots of
-failed tests go to IFDD_META_TEST_SCREENSHOTS; no traces, they would record
-the passwords.
+The certificates are checked. On Linux Chromium trusts the local CA through an
+NSS database in a temporary HOME (``certutil`` of libnss3-tools). Elsewhere
+(macOS) Chromium uses the trust store of the system: without the local CA in
+it (``ifdd-meta local-setup``) the browser tests are skipped with a hint.
+Screenshots of failed tests go to IFDD_META_TEST_SCREENSHOTS; no traces, they
+would record the passwords.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,12 +77,41 @@ def browser(installation, tmp_path_factory):
     if not installation.has("keycloak"):
         pytest.skip("no keycloak instance")
     home = tmp_path_factory.mktemp("browser-home")
-    if installation.ca_file:
+    own_store = sys.platform.startswith("linux")
+    if installation.ca_file and own_store:
         trust_ca(home, installation.ca_file)
     with sync_api.sync_playwright() as playwright:
-        chromium = playwright.chromium.launch(env={**os.environ, "HOME": str(home)})
-        yield chromium
-        chromium.close()
+        environment = {**os.environ, "HOME": str(home)} if own_store else None
+        chromium = playwright.chromium.launch(env=environment)
+        try:
+            if installation.ca_file and not own_store:
+                realm = installation.variables["ifdd_oidc_realm"]
+                if not trusts(chromium, realm):
+                    pytest.skip(
+                        f"Chromium does not trust the local CA ({installation.ca_file}); "
+                        "run the commands of 'ifdd-meta local-setup' and start again"
+                    )
+            yield chromium
+        finally:
+            chromium.close()
+
+
+#: Chromium's errors for a certificate it does not trust.
+UNTRUSTED = ("ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID", "ERR_CERT_INVALID")
+
+
+def trusts(chromium, url: str) -> bool:
+    """Whether Chromium opens url without a certificate error (other errors are raised)."""
+    context = chromium.new_context()
+    try:
+        context.new_page().goto(url, timeout=TIMEOUT)
+    except sync_api.Error as error:
+        if any(code in str(error) for code in UNTRUSTED):
+            return False
+        raise
+    finally:
+        context.close()
+    return True
 
 
 def trust_ca(home: Path, ca_file: Path) -> None:
@@ -140,6 +172,15 @@ def test_ui_reader_sees_and_loads_the_aspects(installation, users, page, ui):
     assert answer.value.status == 200, f"be answered HTTP {answer.value.status}"
 
 
+def test_ui_demo_user_sees_the_aspects(installation, page, ui):
+    """After 'ifdd-meta demo load': ifdd-demo signs in with its password (reads only)."""
+    password = installation.settings.secrets.get("IFDD_META_DEMO_PASSWORD")
+    if not password:
+        pytest.skip("no IFDD_META_DEMO_PASSWORD: run 'ifdd-meta demo load' first")
+    login(page, ui, User("ifdd-demo", password), ui)
+    page.locator('a[href$="/products"]').first.wait_for()
+
+
 def test_ui_without_read_role_shows_a_hint_and_no_aspects(users, page, ui):
     login(page, ui, users["wf"], ui)
     # The hint appears once the permissions are known, so the menu is complete too.
@@ -160,6 +201,18 @@ def test_grafana_lets_in_a_viewer(users, page, grafana):
     me = page.goto(f"{grafana}/api/user")
     assert me.status == 200, f"HTTP {me.status}"
     assert me.json()["login"] == users["reader"].name, "another user"
+    orgs = page.goto(f"{grafana}/api/user/orgs").json()
+    assert [org["role"] for org in orgs] == ["Viewer"], f"roles: {orgs}"
+
+
+def test_grafana_lets_in_the_demo_user(installation, page, grafana):
+    """After 'ifdd-meta demo load': ifdd-demo views the dashboards (realm role)."""
+    password = installation.settings.secrets.get("IFDD_META_DEMO_PASSWORD")
+    if not password:
+        pytest.skip("no IFDD_META_DEMO_PASSWORD: run 'ifdd-meta demo load' first")
+    login(page, f"{grafana}/login/generic_oauth", User("ifdd-demo", password), grafana)
+    me = page.goto(f"{grafana}/api/user")
+    assert me.status == 200, f"HTTP {me.status}"
     orgs = page.goto(f"{grafana}/api/user/orgs").json()
     assert [org["role"] for org in orgs] == ["Viewer"], f"roles: {orgs}"
 

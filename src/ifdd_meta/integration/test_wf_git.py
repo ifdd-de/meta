@@ -5,6 +5,7 @@ Git synchronisation runs. Kestra's API is called inside the kestra container
 with Kestra's own login, as wf's git_sync.py does.
 """
 
+import configparser
 import uuid
 
 import pytest
@@ -82,3 +83,19 @@ def test_flow_round_trip(wf, http):
         wf.run("wf", "./adm_03_git_push.sh")
     files = flow_files(wf, http, namespace)
     assert not any(flow in file for file in files), f"{flow} still in Git: {files}"
+
+
+def test_git_server_contacts_nobody(installation):
+    """The local Git server: offline mode and no version check (reads its app.ini)."""
+    if not installation.has("git"):
+        pytest.skip("no local Git server (wf_git: local)")
+    text = installation.run(
+        "git", "docker", "compose", "exec", "-T", gitserver.SERVICE, "cat", "/etc/gitea/app.ini"
+    )
+    config = configparser.ConfigParser(interpolation=None, strict=False)
+    config.read_string("[root]\n" + text)  # app.ini starts with keys outside a section
+    found = {
+        "server.OFFLINE_MODE": config.get("server", "OFFLINE_MODE", fallback=None),
+        "cron.update_checker.ENABLED": config.get("cron.update_checker", "ENABLED", fallback=None),
+    }
+    assert found == {"server.OFFLINE_MODE": "true", "cron.update_checker.ENABLED": "false"}

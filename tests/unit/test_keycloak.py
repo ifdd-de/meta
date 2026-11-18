@@ -25,7 +25,11 @@ class FakeKeycloak:
             "u-rm": {"clientId": "realm-management", "roles": {"manage-users": {}}},
         }
         self.scopes = {"s-ro": "ifdd_nodes_ro", "s-roles": "roles"}
-        self.groups = {"g-readers": "ifdd_nodes_readers", "g-wf": "ifdd_wf_admins"}
+        self.groups = {
+            "g-readers": "ifdd_nodes_readers",
+            "g-writers": "ifdd_nodes_writers",
+            "g-wf": "ifdd_wf_admins",
+        }
         self.realm_roles = {"readonly", "admin"}
         self.users: dict[str, dict] = {}
         self.admin_token = ADMIN_TOKEN
@@ -134,11 +138,15 @@ class FakeKeycloak:
             del self.users[match.group(1)]
             return 204, None
         group = re.fullmatch(r"/groups/(.+)", rest)
-        if group and method == "PUT":
-            user["groups"].append(self.groups[group.group(1)])
+        if group and method == "PUT":  # Keycloak: joining a group twice changes nothing
+            if self.groups[group.group(1)] not in user["groups"]:
+                user["groups"].append(self.groups[group.group(1)])
             return 204, None
-        if rest == "/role-mappings/realm" and method == "POST":
-            user["realm"] += [r["name"] for r in body]
+        if rest == "/reset-password" and method == "PUT":
+            user["credentials"] = [body]
+            return 204, None
+        if rest == "/role-mappings/realm" and method == "POST":  # granted twice: kept once
+            user["realm"] += [r["name"] for r in body if r["name"] not in user["realm"]]
             return 204, None
         return None
 
@@ -307,3 +315,43 @@ def test_an_expired_admin_token_is_renewed_once(fake):
     fake.fail = r"^/admin/"  # still refused after the new login: the error surfaces
     with pytest.raises(keycloak.KeycloakError, match="HTTP 500"):
         api.client_uuid("ifdd")
+
+
+def test_ensure_user_creates_and_then_updates(fake):
+    api = admin(fake)
+    uuid, created = api.ensure_user(
+        "ifdd-demo", "first", groups=["ifdd_nodes_readers"], first_name="IFDD", last_name="Demo"
+    )
+    assert created
+    user = fake.users[uuid]
+    assert (user["firstName"], user["lastName"]) == ("IFDD", "Demo")
+    user["groups"].append("ifdd_wf_admins")  # added by an operator
+    assert user["realm"] == []
+    again, created = api.ensure_user(
+        "ifdd-demo",
+        "second",
+        groups=["ifdd_nodes_readers", "ifdd_nodes_writers"],
+        realm_roles=["readonly"],
+    )
+    assert (again, created) == (uuid, False)
+    assert user["realm"] == ["readonly"]
+    api.ensure_user("ifdd-demo", "second", realm_roles=["readonly"])
+    assert user["realm"] == ["readonly"]
+    assert user["credentials"] == [{"type": "password", "value": "second", "temporary": False}]
+    assert user["groups"] == ["ifdd_nodes_readers", "ifdd_wf_admins", "ifdd_nodes_writers"]
+    assert len(fake.users) == 1
+
+
+def test_ensure_user_checks_the_groups_before_it_changes_anything(fake):
+    api = admin(fake)
+    uuid, _ = api.ensure_user("ifdd-demo", "first")
+    with pytest.raises(keycloak.KeycloakError, match="group nope not found"):
+        api.ensure_user("ifdd-demo", "second", groups=["nope"])
+    with pytest.raises(keycloak.KeycloakError, match="HTTP 404"):
+        api.ensure_user("ifdd-demo", "second", realm_roles=["superuser"])
+    assert fake.users[uuid]["credentials"][0]["value"] == "first"
+
+
+def test_ensure_user_grants_realm_roles_to_a_new_user(fake):
+    uuid, created = admin(fake).ensure_user("ifdd-demo", "pw", realm_roles=["readonly"])
+    assert created and fake.users[uuid]["realm"] == ["readonly"]

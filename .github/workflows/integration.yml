@@ -74,10 +74,20 @@ jobs:
           EOF
           ifdd-meta compile ci-run/installation.yaml
           ifdd-meta --settings "$SETTINGS" config check
-          echo "127.0.0.1 $(grep -v '^#' ci-run/hosts.txt | tr '\n' ' ')" | sudo tee -a /etc/hosts
 
       - name: Create
-        run: ifdd-meta --settings "$SETTINGS" create
+        run: |
+          # Every instance becomes a Git repository; its first commit needs an identity.
+          git config --global user.name "ifdd-meta CI"
+          git config --global user.email "ci@example.org"
+          ifdd-meta --settings "$SETTINGS" create
+
+      - name: Local setup (/etc/hosts and the local CA)
+        run: |
+          # Runs the printed commands, as an operator would copy them.
+          ifdd-meta --settings "$SETTINGS" local-setup | tee ci-run/artefacts/local-setup.txt
+          grep -v '^#' ci-run/artefacts/local-setup.txt | bash -e
+          grep -A1 '^# BEGIN ifdd-meta ci$' /etc/hosts
 
       - name: Build
         run: ifdd-meta --settings "$SETTINGS" build
@@ -110,6 +120,24 @@ jobs:
             [ "$code" = 200 ] || failed=1
           done
           [ -z "${failed:-}" ]
+
+      - name: Mount check sees a missing directory
+        run: |
+          # The check of 'up' must answer 1 (not seen) where the daemon creates
+          # an empty directory for a source it does not have.
+          version=$(sed -n 's/^  ifdd_proxy_traefik_version: "\(.*\)"$/\1/p' ci-run/cookiecutter_all.yaml)
+          code=0
+          docker run --rm --network none --entrypoint /bin/sh \
+            --volume "$RUNNER_TEMP/not-shared:/check:ro" "traefik:$version" \
+            -c 'test -f /check/instances.json' || code=$?
+          echo "exit code $code"
+          [ "$code" = 1 ]
+
+      - name: Demo data
+        run: |
+          ifdd-meta --settings "$SETTINGS" demo load
+          # A second run sets the same password again and loads nothing new.
+          ifdd-meta --settings "$SETTINGS" demo load
 
       - name: Integration tests
         env:

@@ -5,6 +5,35 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- Local test installation on macOS with Colima: guide `docs/local-macos-colima.md`.
+- `create` makes every instance a local Git repository (one commit, no remote)
+  for later `cruft update`; Git name and e-mail come from the configuration
+  only. It stops, without a repository, if the template's `.gitignore` would let
+  a secret-like file (`.env`, `secrets/*`, keys) into Git.
+- `hosts.txt` is a marked block for `/etc/hosts` (`# BEGIN/END ifdd-meta <name>`)
+  for short names and for `tls: local-ca`, also with a host suffix such as
+  `demo.test`; DNS records only for public names.
+- `ifdd-meta local-setup [--remove]`: prints the `sudo` commands for the
+  `/etc/hosts` block and for trusting the local CA (macOS System keychain,
+  Debian/Ubuntu `update-ca-certificates`), and the commands that undo them
+  (the keychain entry is named by its SHA-256 fingerprint); runs nothing. The integration run executes the printed commands.
+- `ifdd-meta demo load`: demo user `ifdd-demo` (created, or password set and
+  missing groups added) and the ct pipelines `generate-energy-grid` and
+  `generate-time-series`; the password comes from `IFDD_META_DEMO_PASSWORD`, a
+  new one is written into `.env` (0600) and never shown. The integration run
+  loads the demo data twice.
+- `ifdd-meta up` first checks with a throwaway container of the Traefik image
+  that the Docker daemon sees the work directory; a daemon in a VM (Colima)
+  sees only shared directories and would mount empty directories instead.
+- The demo user gets the realm role of a Grafana viewer (`ifdd_ts_role_viewer`)
+  with ts; a browser test signs in to Grafana as the demo user.
+- Browser tests outside Linux use the system trust store and are skipped with a
+  hint if Chromium does not trust the local CA; a new test signs in as the demo
+  user.
+- The local Git server for wf runs in offline mode and without Gitea's weekly
+  version check (`cron.update_checker`, on by default); an integration test
+  reads its `app.ini`.
+
 - Browser test of the ui without a read role: waits for the ui's hint
   (`role="status"`, ui 26.11.2) instead of a quiet network, then checks that
   no aspect is offered; the reader must not see the hint.

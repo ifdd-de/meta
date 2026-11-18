@@ -78,6 +78,23 @@ def write_env(path: Path, variable: str, value: str, kestra: bool = False) -> bo
     return changed
 
 
+def set_env(path: Path, variable: str, value: str, new_mode: int = 0o600) -> None:
+    """Set ``variable`` in a .env file: a new file (``new_mode``), the line replaced or added."""
+    _check_directory(path)
+    if not re.fullmatch(r"[A-Za-z0-9._~+/=@-]+", value):
+        raise SecretError(f"the value for {variable} would need quotes; not written")
+    if not path.is_file():
+        _write_atomically(path, f"{variable}={value}\n", new_mode)
+        return
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(variable)}=", re.MULTILINE)
+    if pattern.search(text):
+        write_env(path, variable, value)
+        return
+    separator = "" if not text or text.endswith("\n") else "\n"
+    _write_atomically(path, f"{text}{separator}{variable}={value}\n", path.stat().st_mode & 0o777)
+
+
 def _check_directory(path: Path) -> None:
     if not path.parent.is_dir():
         raise SecretError(f"target directory missing: {path.parent}")

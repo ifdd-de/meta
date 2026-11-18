@@ -234,11 +234,14 @@ class Admin:
         roles: dict[str, list[str]] | None = None,
         create_roles: bool = False,
         temporary: bool = False,
+        first_name: str = "",
+        last_name: str = "ifdd-meta",
     ) -> str:
         """Create an enabled user with a password; returns its id. Fails if it exists.
 
-        The user gets a verified example address and a name, so the user
-        profile of Keycloak asks for nothing at the first login.
+        The user gets a verified example address and a name (first name: the
+        user name unless given), so the user profile of Keycloak asks for
+        nothing at the first login.
         """
         if self.user_uuid(username):
             raise KeycloakError(f"user {username} exists already")
@@ -253,8 +256,8 @@ class Admin:
                 "enabled": True,
                 "email": f"{username}@example.org",
                 "emailVerified": True,
-                "firstName": username,
-                "lastName": "ifdd-meta",
+                "firstName": first_name or username,
+                "lastName": last_name,
                 "credentials": [{"type": "password", "value": password, "temporary": temporary}],
             },
         )
@@ -272,6 +275,40 @@ class Admin:
             self.call("DELETE", f"/users/{uuid}")
             raise
         return uuid
+
+    def ensure_user(
+        self,
+        username: str,
+        password: str,
+        *,
+        groups: list[str] = (),
+        realm_roles: list[str] = (),
+        first_name: str = "",
+        last_name: str = "ifdd-meta",
+    ) -> tuple[str, bool]:
+        """Create the user, or set the password and add missing groups and realm roles.
+
+        Returns (id, created). Groups and roles the user has beyond these stay.
+        """
+        uuid = self.user_uuid(username)
+        if uuid is None:
+            created = self.add_user(
+                username, password, groups=list(groups), realm_roles=list(realm_roles),
+                first_name=first_name, last_name=last_name,
+            )  # fmt: skip
+            return created, True
+        group_ids = [self._group_id(name) for name in groups]
+        realm = [self._realm_role(name) for name in realm_roles]
+        self.call(
+            "PUT",
+            f"/users/{uuid}/reset-password",
+            {"type": "password", "value": password, "temporary": False},
+        )
+        for group_id in group_ids:
+            self.call("PUT", f"/users/{uuid}/groups/{group_id}")
+        if realm:  # Keycloak keeps a role granted twice once
+            self.call("POST", f"/users/{uuid}/role-mappings/realm", realm)
+        return uuid, False
 
     def delete_user(self, uuid: str) -> None:
         self.call("DELETE", f"/users/{uuid}")

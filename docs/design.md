@@ -124,14 +124,15 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `config check` | files found and parsed; every key of the variables file defined by at least one template at the chosen ref; every template variable present (except versions), a missing one is an error; no secret-like names; settings valid | nothing |
 | `compile` | writes the variables file and the other files from a description (section 10); `--check` only compares | generated files |
 | `config show` | effective settings with the source of each value | nothing |
-| `create` | `cruft create` per service with skips and ref; wheels; local CA (`tls: local-ca`: `proxy/adm_01_certs.sh`, `ca.crt` into `certs/` of be, ct, ts, ts-api, wf); client secrets from `keycloak/.env`; instance directories recorded in `<workdir>/.ifdd-meta/instances.json`; refuses existing instances and, for keycloak and ts, root | work directory |
+| `create` | `cruft create` per service with skips and ref; wheels; local CA (`tls: local-ca`: `proxy/adm_01_certs.sh`, `ca.crt` into `certs/` of be, ct, ts, ts-api, wf); client secrets from `keycloak/.env`; instance directories recorded in `<workdir>/.ifdd-meta/instances.json`; every instance a local Git repository with one commit and no remote (identity from the Git configuration only; stops if a secret-like file would be committed); refuses existing instances and, for keycloak and ts, root | work directory |
+| `local-setup` | prints the `sudo` commands for the `/etc/hosts` block of `hosts.txt` and for trusting the local CA (macOS: System keychain; Debian/Ubuntu: `update-ca-certificates`); `--remove` prints the commands that undo them; runs nothing | nothing |
 | `update` | `cruft update` per instance, `--set` passed as `--variables-to-update`; lists `.rej` files and fails on them | instances |
 | `build` | images of all or selected services | images |
-| `up` / `down` | start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
+| `up` / `down` | first a check that the Docker daemon sees the work directory (a container of the Traefik image looks for the state file), then start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
 | `status`, `logs` | state of all services; logs into a directory (CI artefacts) | nothing / log files |
 | `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown | realm |
 | `keycloak add-user` | a user with a generated password (new file, 0600), groups, realm roles and client roles; `--temporary` asks for a new password at the first login. Context patterns: `--role ifdd:<pattern> --create-roles`, so there is no `add-context-role` | realm |
-| `demo load` | demo user and the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
+| `demo load` | demo user `ifdd-demo` (readers, writers, privileged, wf group, context root, with ts the realm role `ifdd_ts_role_viewer`; created, or password set and missing groups and roles added) with the password `IFDD_META_DEMO_PASSWORD` (a new one goes into `.env`, 0600), then the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
 | `test` | integration tests against the running installation (section 8); data only with the setting `tests: write` | test data |
 | `docs render` | the instance chapter (former `.adm_docs`) with the same variables | output directory |
 
@@ -151,8 +152,8 @@ and prints the last 20 lines of the log. `--verbose` shows everything. Exit code
 |---|---|---|
 | unit | pytest with fakes for `cruft`, `docker` and `git` | the tool itself, without containers |
 | plumbing | pytest | security headers and CSP of every route, dashboard of the proxy behind a password |
-| API | pytest + HTTP client (standard library), tokens by client credentials | Keycloak discovery and the service clients · be: 401 without token, write and read, unchanged write, valid time (`at`), domain contexts hidden, refused and filtered for a client without their pattern, CORS for the ui only · ts-api: write and read the latest sample, 422 for a wrong unit or value, read and write roles, 403 for a foreign store · schema/type/unit: JSON-LD, CORS `*` · ct pipelines into be (again: no new documents) and ts-api · wf: a flow goes to the Git server and is removed again · Grafana data sources healthy |
-| browser | Playwright (Chromium), extra `ifdd-meta[browser]` | login through Keycloak for two temporary users: a reader sees and loads the aspects in the ui, is a Grafana Viewer and is refused by oauth2-proxy in front of wf; a member of the wf group gets into wf, sees the ui's hint without a read role (ui 26.11.2) and no aspects, and is refused by Grafana (no realm role). Chromium trusts the local CA through an NSS database in a temporary HOME; screenshots of failures, no traces (they record passwords) |
+| API | pytest + HTTP client (standard library), tokens by client credentials | Keycloak discovery and the service clients · be: 401 without token, write and read, unchanged write, valid time (`at`), domain contexts hidden, refused and filtered for a client without their pattern, CORS for the ui only · ts-api: write and read the latest sample, 422 for a wrong unit or value, read and write roles, 403 for a foreign store · schema/type/unit: JSON-LD, CORS `*` · ct pipelines into be (again: no new documents) and ts-api · wf: a flow goes to the Git server and is removed again; the Git server runs in offline mode without version check · Grafana data sources healthy |
+| browser | Playwright (Chromium), extra `ifdd-meta[browser]` | login through Keycloak for two temporary users: a reader sees and loads the aspects in the ui, is a Grafana Viewer and is refused by oauth2-proxy in front of wf; a member of the wf group gets into wf, sees the ui's hint without a read role (ui 26.11.2) and no aspects, and is refused by Grafana (no realm role). the demo user after `demo load` sees the aspects. On Linux Chromium trusts the local CA through an NSS database in a temporary HOME; elsewhere (macOS) it uses the system store, and without the CA there the browser tests are skipped with a hint; screenshots of failures, no traces (they record passwords) |
 | security | `tools-pentest` (passive, outside view) | later |
 | upgrade | previous release → demo data → `update` → checks again | later |
 
@@ -235,7 +236,7 @@ Output (each file marked as generated):
 | `cookiecutter_all.yaml` | every template variable: derived values, values of `overrides`, the rest from the templates' `cookiecutter.json` at the chosen ref |
 | `ifdd-meta.yaml` | settings of the tool (section 4) |
 | `.env.example` | names of the secrets the tool needs, without values |
-| `hosts.txt` | host names for DNS records, or `/etc/hosts` lines for short names |
+| `hosts.txt` | host names for DNS records, or a marked block for `/etc/hosts` (short names or `tls: local-ca`) |
 
 **Derived values:** host names (`<label>.<suffix>` or the short label) and their
 URLs, the realm URL and its endpoints, the issuers of oauth2-proxy and Grafana,

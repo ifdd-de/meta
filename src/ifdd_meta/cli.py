@@ -9,7 +9,18 @@ from typing import Annotated
 
 import typer
 
-from . import __version__, check, compiler, copysecret, create, keycloak, services, testrun
+from . import (
+    __version__,
+    check,
+    compiler,
+    copysecret,
+    create,
+    demo,
+    keycloak,
+    localsetup,
+    services,
+    testrun,
+)
 from .copysecret import SecretError
 from .description import DescriptionError
 from .description import load as load_description
@@ -29,6 +40,8 @@ keycloak_app = typer.Typer(
     help="Change the realm through the Keycloak admin API.", no_args_is_help=True
 )
 app.add_typer(keycloak_app, name="keycloak")
+demo_app = typer.Typer(help="Demo user and demo data.", no_args_is_help=True)
+app.add_typer(demo_app, name="demo")
 
 
 def _version(value: bool) -> None:
@@ -222,6 +235,24 @@ def down_command(
     _run_step(ctx, "down", verbose, lambda s, r: services.down(s, r, _only(only), purge))
 
 
+@app.command("local-setup")
+def local_setup_command(
+    ctx: typer.Context,
+    remove: Annotated[
+        bool, typer.Option(help="The commands that undo it (before down --purge).")
+    ] = False,
+) -> None:
+    """Print the commands (sudo) for /etc/hosts and the local CA; runs nothing."""
+    settings = _settings(ctx)
+    try:
+        lines = localsetup.commands(settings, remove=remove)
+    except (create.CreateError, OSError, ValueError) as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    for line in lines:
+        typer.echo(line)
+
+
 @app.command("status")
 def status_command(ctx: typer.Context, only: OnlyOption = None) -> None:
     """State and health of every container; exit 1 if one is not running or not healthy."""
@@ -388,6 +419,20 @@ def keycloak_add_user(
     for created_owner, created_role in admin.created_roles:
         typer.echo(f"created role {created_role} of {created_owner}")
     typer.echo(f"created user {username}; password in {password_file}")
+
+
+@demo_app.command("load")
+def demo_load(ctx: typer.Context, verbose: VerboseOption = False) -> None:
+    """Demo user ifdd-demo and the fake data of the ct pipelines; the services must run."""
+    settings = _settings(ctx)
+    run = Run(settings["workdir"] / "logs", "demo-load", typer.echo, verbose)
+    try:
+        demo.load(settings, run)
+    except (create.CreateError, StepError, SecretError, keycloak.KeycloakError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        typer.echo(f"log: {run.log}", err=True)
+        raise typer.Exit(1) from None
+    run.overview(f"demo load: done; log: {run.log}")
 
 
 def main() -> None:
