@@ -50,7 +50,10 @@ The description sets the installation name, a host suffix (empty: short names
 contact address, the realms, the context root, the services, the template
 reference and, under `overrides`, any template variable. Values not derived from
 it come from [`src/ifdd_meta/data/defaults.yaml`](src/ifdd_meta/data/defaults.yaml).
-The only example is the description of the public demo,
+Short names work for a quick local test, but not with wf in production: Java
+clients such as Kestra send no server name (SNI) for names without a dot, and
+the proxy refuses such handshakes (`sniStrict`). `compile` warns; use a suffix
+such as `ci.test`. The only example is the description of the public demo,
 [`config/demo/installation.yaml`](config/demo/installation.yaml); its host names
 lie below `example.ifdd.de`, which is reserved for examples.
 

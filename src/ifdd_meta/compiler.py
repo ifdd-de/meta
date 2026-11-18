@@ -34,6 +34,15 @@ class CompileError(ValueError):
 class Result:
     values: dict[str, str | list[str]]
     files: dict[str, str]  # file name -> text
+    warnings: tuple[str, ...] = ()
+
+
+SHORT_NAMES_WITH_WF = (
+    "short host names (no hosts.suffix) with wf: Java clients such as Kestra send no "
+    "server name (SNI) for names without a dot, and the proxy refuses such handshakes in "
+    "production (sniStrict), so the Git synchronisation of wf fails; set hosts.suffix, "
+    "e.g. to a .test domain"
+)
 
 
 def defaults_text() -> str:
@@ -68,7 +77,11 @@ def compile_description(description: Description, defaults: str | None = None) -
         "",
         "default_context:",
     ]
+    warnings = (
+        (SHORT_NAMES_WITH_WF,) if not description.suffix and "wf" in description.services else ()
+    )
     return Result(
+        warnings=warnings,
         values=values,
         files={
             VARIABLES_FILE: yamltext.render(document, values, head),

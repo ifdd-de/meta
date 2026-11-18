@@ -144,3 +144,11 @@ def test_external_git_server_for_wf(tmp_path):
     assert "git" not in result.values["ifdd_proxy_internal_hosts"].split(", ")
     assert "IFDD_META_WF_GIT_TOKEN=" in result.files[".env.example"]
     assert "wf_git: external\n" in result.files["ifdd-meta.yaml"]
+
+
+def test_warning_for_short_names_with_wf(tmp_path):
+    assert compiler.compile_description(describe(tmp_path, "installation: x\n")).warnings
+    with_suffix = "installation: x\nhosts:\n  suffix: ci.test\n"
+    assert not compiler.compile_description(describe(tmp_path, with_suffix)).warnings
+    without_wf = "installation: x\nservices: [proxy, be]\n"
+    assert not compiler.compile_description(describe(tmp_path, without_wf)).warnings

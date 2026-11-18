@@ -132,6 +132,8 @@ def compile_command(
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from None
     directory = output or description.parent
+    for warning in result.warnings:
+        typer.echo(f"warning: {warning}", err=True)
     if check_only:
         stale = compiler.differences(result, directory)
         for name in stale:
