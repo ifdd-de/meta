@@ -1,0 +1,128 @@
+name: Integration
+
+# Builds and starts an installation from the templates on a fresh runner, with
+# the real images, and checks that every service answers through the proxy.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git reference of the templates (empty: the one of config/demo)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      SETTINGS: ci-run/ifdd-meta.yaml
+      # wf needs a Git server for its flows (production); it follows in a later step.
+      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Runner before the run
+        run: |
+          mkdir -p ci-run/artefacts
+          { echo "## before"; nproc; free -h; df -h /; docker version --format '{{.Server.Version}}'; docker compose version; } \
+            | tee ci-run/artefacts/runner.txt
+
+      - name: Describe and compile
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if [ -z "$REF" ]; then
+            REF=$(python -c 'import yaml; print(yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]["ref"])')
+          fi
+          cat > ci-run/installation.yaml <<EOF
+          installation: ci
+          tls: local-ca
+          services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
+          templates:
+            ref: $REF
+          EOF
+          ifdd-meta compile ci-run/installation.yaml
+          ifdd-meta --settings "$SETTINGS" config check
+          grep -v '^#' ci-run/hosts.txt | sudo tee -a /etc/hosts
+
+      - name: Create
+        run: ifdd-meta --settings "$SETTINGS" create
+
+      - name: Build
+        run: ifdd-meta --settings "$SETTINGS" build
+
+      - name: Up
+        run: ifdd-meta --settings "$SETTINGS" up --only "$START"
+
+      - name: Status
+        run: ifdd-meta --settings "$SETTINGS" status --only "$START"
+
+      - name: Services answer through the proxy
+        run: |
+          ca=ci-run/work/proxy/certs/ca.crt
+          for url in \
+              https://id/realms/ifdd/.well-known/openid-configuration \
+              https://rest/version \
+              https://ui/ \
+              https://schema/v1/ \
+              https://type/v1/ \
+              https://unit/v1/ \
+              https://ts/api/health \
+              https://ts/tsapi/version; do
+            code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' "$url" || true)
+            echo "$code $url"
+            [ "$code" = 200 ] || failed=1
+          done
+          [ -z "${failed:-}" ]
+
+      - name: Runner after the run
+        if: always()
+        run: |
+          {
+            echo "## after"; free -h; df -h /
+            docker system df
+            docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+            docker images --digests --format 'table {{.Repository}}:{{.Tag}}\t{{.Digest}}\t{{.Size}}'
+          } | tee -a ci-run/artefacts/runner.txt
+
+      - name: Collect logs
+        if: always()
+        run: |
+          if [ -f ci-run/work/.ifdd-meta/instances.json ]; then
+            ifdd-meta --settings "$SETTINGS" logs --output ci-run/artefacts/containers || true
+          fi
+          cp -r ci-run/work/logs ci-run/artefacts/ifdd-meta 2>/dev/null || true
+          python tools/ci/scrub_secrets.py ci-run/work ci-run/artefacts
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-${{ github.run_id }}
+          path: ci-run/artefacts
+          retention-days: 14
+
+      - name: Down
+        if: always()
+        run: |
+          if [ -f ci-run/work/.ifdd-meta/instances.json ]; then
+            ifdd-meta --settings "$SETTINGS" down --purge
+          fi

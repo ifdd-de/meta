@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from . import __version__, check, compiler, create
+from . import __version__, check, compiler, create, services
 from .copysecret import SecretError
 from .description import DescriptionError
 from .description import load as load_description
@@ -167,6 +167,87 @@ def create_command(
         typer.echo(f"log: {run.log}", err=True)
         raise typer.Exit(1) from None
     run.overview(f"{len(state)} instances in {settings['workdir']}; log: {run.log}")
+
+
+OnlyOption = Annotated[
+    str | None, typer.Option("--only", help="Comma-separated services; default: all.")
+]
+VerboseOption = Annotated[bool, typer.Option("--verbose", "-v", help="Show the log.")]
+
+
+def _run_step(ctx: typer.Context, name: str, verbose: bool, step) -> None:
+    settings = _settings(ctx)
+    run = Run(settings["workdir"] / "logs", name, typer.echo, verbose)
+    try:
+        step(settings, run)
+    except (create.CreateError, StepError, SecretError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        typer.echo(f"log: {run.log}", err=True)
+        raise typer.Exit(1) from None
+    run.overview(f"{name}: done; log: {run.log}")
+
+
+@app.command("build")
+def build_command(ctx: typer.Context, only: OnlyOption = None, verbose: VerboseOption = False):
+    """Build the images and fetch what the services need (Grafana plugins, upstream images)."""
+    _run_step(ctx, "build", verbose, lambda s, r: services.build(s, r, _only(only)))
+
+
+@app.command("up")
+def up_command(ctx: typer.Context, only: OnlyOption = None, verbose: VerboseOption = False):
+    """Start the services in order and wait until they are healthy."""
+    _run_step(ctx, "up", verbose, lambda s, r: services.up(s, r, _only(only)))
+
+
+@app.command("down")
+def down_command(
+    ctx: typer.Context,
+    only: OnlyOption = None,
+    purge: Annotated[
+        bool,
+        typer.Option(
+            help="Also delete volumes, networks and the instances (keeps the persist paths)."
+        ),
+    ] = False,
+    verbose: VerboseOption = False,
+):
+    """Stop the services."""
+    _run_step(ctx, "down", verbose, lambda s, r: services.down(s, r, _only(only), purge))
+
+
+@app.command("status")
+def status_command(ctx: typer.Context, only: OnlyOption = None) -> None:
+    """State and health of every container; exit 1 if one is not running or not healthy."""
+    settings = _settings(ctx)
+    try:
+        rows = services.status(settings, _only(only))
+    except create.CreateError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    widths = [max(len(row[i]) for row in rows) for i in range(3)]
+    for row in rows:
+        typer.echo(
+            "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row[:3])) + f"  {row[3]}"
+        )
+    unhealthy = [row for row in rows if row[2] != "running" or row[3] not in ("", "healthy")]
+    if unhealthy:
+        raise typer.Exit(1)
+
+
+@app.command("logs")
+def logs_command(
+    ctx: typer.Context,
+    output: Annotated[Path, typer.Option(help="Directory for one log file per service.")],
+) -> None:
+    """Write the container logs of every service into a directory."""
+    settings = _settings(ctx)
+    run = Run(settings["workdir"] / "logs", "logs", typer.echo)
+    try:
+        written = services.logs(settings, run, output)
+    except create.CreateError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"{len(written)} log files in {output}")
 
 
 def main() -> None:

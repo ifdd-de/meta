@@ -23,6 +23,13 @@ release follows the first successful integration run.
   secrets from `keycloak/.env` (taken over from `copy_secrets.py`); a log per
   run in `<workdir>/logs/`.
 - Setting `tls` (`local-ca`, `letsencrypt`, `own`); `compile` writes it.
+- `build`, `up`, `down [--purge]`, `status`, `logs --output DIR`; `down --purge`
+  keeps the ACME state of the proxy, `create` restores it.
+- `create`: `IFDD_META_WF_GIT_TOKEN` into wf as `SECRET_GIT_TOKEN`.
+- Workflow `integration.yml`: create, build and start an installation with the
+  real images on a GitHub runner (wf not started yet), check every service
+  through the proxy, keep logs and measurements; `tools/ci/scrub_secrets.py`
+  removes artefacts that contain a generated secret.
 - `compile`: `ifdd_keycloak_proxy_gate_hosts` always names the wf host, because
   the keycloak hook of v26.11.1 rejects an empty value.
 - Workflow `test.yml`, job `config (demo)`: generated files up to date,

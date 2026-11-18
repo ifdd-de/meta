@@ -81,6 +81,9 @@ SECRET_COPIES = (
     ),
 )
 
+#: Files that survive "down --purge" (relative to the instance), e.g. the ACME state.
+PERSIST = {"proxy": ("letsencrypt/acme.json",)}
+
 #: Hooks of these templates refuse to run as root.
 NO_ROOT = ("keycloak", "ts")
 
@@ -89,6 +92,7 @@ __all__ = [
     "DASHBOARD_LABEL",
     "HOST_LABELS",
     "NO_ROOT",
+    "PERSIST",
     "SECRET_COPIES",
     "SECRET_ENDINGS",
     "SERVICES",
