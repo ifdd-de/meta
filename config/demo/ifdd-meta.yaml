@@ -11,3 +11,5 @@ workdir: work
 persist: state
 wf_git: local
 git_host: git.demo.grid.example.ifdd.de
+# Integration tests (ifdd-meta test): read, or write to add test data
+tests: read

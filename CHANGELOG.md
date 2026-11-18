@@ -47,6 +47,18 @@ release follows the first successful integration run.
   removes artefacts that contain a generated secret.
 - `compile`: `ifdd_keycloak_proxy_gate_hosts` always names the wf host, because
   the keycloak hook of v26.11.1 rejects an empty value.
+- `ifdd-meta test [-k] [-x] [-v] [--junit FILE]`: integration tests in the
+  package (`src/ifdd_meta/integration/`, pytest without assertion rewriting):
+  Keycloak, be, ts-api, schema/type/unit, proxy headers and dashboard, Grafana
+  data sources, ct pipelines, Git round trip of wf. Setting `tests`
+  (`read` by default, `compile` writes it; `write` adds test data and a
+  temporary service client with the pattern `ops.example.ifdd.de`).
+- `ifdd-meta keycloak add-client`: service client with client roles, scope
+  mappings and default scopes through the admin API; secret into a new 0600 file.
+- pytest is a runtime dependency; the compose file of the Git server is package
+  data.
+- Integration run: `ifdd-meta test` with `IFDD_META_TESTS=write`, JUnit report as
+  artefact.
 - Workflow `test.yml`, job `config (demo)`: generated files up to date,
   `config check` against GitHub, every template renders with the generated
   variables.

@@ -1,7 +1,8 @@
 name: Integration
 
 # Builds and starts an installation from the templates on a fresh runner, with
-# the real images, and checks that every service answers through the proxy.
+# the real images, checks that every service answers through the proxy and runs
+# the integration tests (ifdd-meta test) with test data.
 
 on:
   pull_request:
@@ -103,6 +104,12 @@ jobs:
             [ "$code" = 200 ] || failed=1
           done
           [ -z "${failed:-}" ]
+
+      - name: Integration tests
+        env:
+          # Writes test data (a fresh installation that is thrown away afterwards).
+          IFDD_META_TESTS: write
+        run: ifdd-meta --settings "$SETTINGS" test -v --junit ci-run/artefacts/junit.xml
 
       - name: Runner after the run
         if: always()
