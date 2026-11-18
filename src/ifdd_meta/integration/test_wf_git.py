@@ -15,12 +15,14 @@ from ifdd_meta import gitserver
 SCRIPT = """
 import base64, os, sys, urllib.error, urllib.request
 login = os.environ["IFDD_WF_ADMIN_USER"] + ":" + os.environ["IFDD_WF_ADMIN_PASSWORD"]
+headers = {"Authorization": "Basic " + base64.b64encode(login.encode()).decode()}
+body = None
+if len(sys.argv) > 3:  # a content type only with a body: Kestra answers 415 otherwise
+    body = sys.argv[3].encode()
+    headers["Content-Type"] = "application/x-yaml"
 call = urllib.request.Request(
-    "http://localhost:8080/api/v1/main" + sys.argv[2],
-    data=sys.argv[3].encode() if len(sys.argv) > 3 else None,
-    method=sys.argv[1],
-    headers={"Authorization": "Basic " + base64.b64encode(login.encode()).decode(),
-             "Content-Type": "application/x-yaml"},
+    "http://localhost:8080/api/v1/main" + sys.argv[2], data=body, method=sys.argv[1],
+    headers=headers,
 )
 try:
     with urllib.request.urlopen(call, timeout=60) as answer:
@@ -76,7 +78,7 @@ def test_flow_round_trip(wf, http):
         assert any(flow in file for file in files), f"{flow} not in Git: {files}"
     finally:
         deleted = kestra(wf, "DELETE", f"/flows/{namespace}/{flow}")
-        assert deleted in (200, 204), f"deleting the flow: HTTP {deleted}"
+        assert deleted == 204, f"deleting the flow: HTTP {deleted}"
         wf.run("wf", "./adm_03_git_push.sh")
     files = flow_files(wf, http, namespace)
     assert not any(flow in file for file in files), f"{flow} still in Git: {files}"
