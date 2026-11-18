@@ -108,7 +108,9 @@ The skip paths are those the template READMEs recommend (handover B.5); the
 catalogue closes the gaps of the old meta repository (wf, ts).
 
 **Start order:** networks → proxy (Traefik only) → keycloak, be, ui, schema, type,
-unit → proxy (all services, oauth2-proxy needs the realm) → wf → ts → ts-api.
+unit → proxy (all services, oauth2-proxy needs the realm) → Git server for wf
+(`wf_git: local`; user, repository and token are created here) → wf → ts →
+ts-api.
 
 **Secret distribution** (from `keycloak/.env` to the users, values never printed):
 ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct client →

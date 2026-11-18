@@ -1,0 +1,52 @@
+# Git server for the flows of wf (Kestra Git synchronisation), managed by
+# ifdd-meta. Gitea, rootless upstream image, SQLite, no SSH, no registration,
+# nothing visible without sign-in. Reached through the proxy only, under the
+# host IFDD_GIT_HOST (one of the proxy's internal hosts, so Kestra resolves it
+# and the certificate covers it). Values come from .env, written by
+# "ifdd-meta create".
+name: ${IFDD_GIT_PROJECT:?set IFDD_GIT_PROJECT in .env}
+
+services:
+  gitea:
+    image: ${IFDD_GIT_IMAGE:?set IFDD_GIT_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      GITEA__server__ROOT_URL: "https://${IFDD_GIT_HOST:?set IFDD_GIT_HOST in .env}/"
+      GITEA__server__DOMAIN: "${IFDD_GIT_HOST}"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__START_SSH_SERVER: "false"
+      GITEA__database__DB_TYPE: "sqlite3"
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: "${IFDD_GIT_SECRET_KEY:?set IFDD_GIT_SECRET_KEY in .env}"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
+      GITEA__log__LEVEL: "Warn"
+    volumes:
+      - data:/var/lib/gitea
+      - config:/etc/gitea
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${IFDD_GIT_PROJECT}.rule=Host(`${IFDD_GIT_HOST}`)"
+      - "traefik.http.services.${IFDD_GIT_PROJECT}.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${IFDD_GIT_PROJECT}.middlewares=security-headers@file"
+      - "traefik.docker.network=${IFDD_PROXY_NETWORK:?set IFDD_PROXY_NETWORK in .env}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 2s
+
+networks:
+  proxy:
+    external: true
+    name: ${IFDD_PROXY_NETWORK}
+
+volumes:
+  data:
+  config:

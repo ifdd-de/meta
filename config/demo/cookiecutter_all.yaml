@@ -29,7 +29,8 @@ default_context:
     id.demo.grid.example.ifdd.de, rest.demo.grid.example.ifdd.de,
     ui.demo.grid.example.ifdd.de, schema.demo.grid.example.ifdd.de,
     type.demo.grid.example.ifdd.de, unit.demo.grid.example.ifdd.de,
-    ts.demo.grid.example.ifdd.de, wf.demo.grid.example.ifdd.de
+    ts.demo.grid.example.ifdd.de, wf.demo.grid.example.ifdd.de,
+    git.demo.grid.example.ifdd.de
   # Host of the Traefik dashboard (/dashboard/) (derived)
   ifdd_proxy_host: "proxy.demo.grid.example.ifdd.de"
   # User of the Traefik dashboard; its password is generated into proxy/.env
@@ -533,9 +534,10 @@ default_context:
 
   # --- Git synchronisation of the flows (production only) ---
   # Repository of the flows, https without credentials; the token goes into secrets/kestra.env
-  ifdd_wf_git_url: "https://git.example.org/example/wf-content.git"
-  # User name for the Git server
-  ifdd_wf_git_username: "git"
+  # (derived with the local Git server of ifdd-meta, wf_git: local)
+  ifdd_wf_git_url: "https://git.demo.grid.example.ifdd.de/kestra/flows.git"
+  # User name for the Git server; the owner of the repository (derived with wf_git: local)
+  ifdd_wf_git_username: "kestra"
   # Branch of the flows; it needs a first commit before the first start
   ifdd_wf_git_branch: "main"
   # Root namespaces that are pushed and restored, comma-separated

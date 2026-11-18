@@ -26,6 +26,16 @@ release follows the first successful integration run.
 - `build`, `up`, `down [--purge]`, `status`, `logs --output DIR`; `down --purge`
   keeps the ACME state of the proxy, `create` restores it.
 - `create`: `IFDD_META_WF_GIT_TOKEN` into wf as `SECRET_GIT_TOKEN`.
+- Local Git server for the flows of wf (`wf_git: local`, the default of a
+  description with wf): Gitea (`gitea/gitea:1.27.3-rootless`, SQLite, no SSH,
+  no registration, sign-in required) behind the proxy under the host `git`.
+  `compile` adds the host to the internal hosts, `hosts.txt` and
+  `ifdd_wf_git_url`; `create` writes its Compose project; `up` starts it before
+  wf and creates user, repository (first commit on the branch) and token
+  (into `wf/secrets/kestra.env`), never showing the token. `wf_git: external`
+  keeps `IFDD_META_WF_GIT_TOKEN` and the overrides.
+- Integration run: wf starts too; checks of `https://wf/` (login gate) and
+  `https://git/api/healthz`.
 - Workflow `integration.yml`: create, build and start an installation with the
   real images on a GitHub runner (wf not started yet), check every service
   through the proxy, keep logs and measurements; `tools/ci/scrub_secrets.py`

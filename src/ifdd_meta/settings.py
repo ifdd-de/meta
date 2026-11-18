@@ -26,6 +26,7 @@ SERVICES = (
 )  # fmt: skip
 ENVIRONMENTS = ("production", "development")
 TLS_MODES = ("local-ca", "letsencrypt", "own")
+WF_GIT_MODES = ("local", "external")
 WHEEL_PACKAGES = ("be-core", "ts-core")
 
 SETTINGS_FILE = "ifdd-meta.yaml"
@@ -71,6 +72,8 @@ FIELDS = (
     Field("persist", "path", "state"),
     Field("wheels", "mapping", {}),
     Field("wait_timeout", "int", 300),
+    Field("wf_git", "choice", "external", WF_GIT_MODES),
+    Field("git_host", "str", "git"),
 )
 _BY_NAME = {field.name: field for field in FIELDS}
 

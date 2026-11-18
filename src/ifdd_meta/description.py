@@ -9,14 +9,14 @@ from typing import Any
 
 import yaml
 
-from .settings import SERVICES, TLS_MODES
+from .settings import SERVICES, TLS_MODES, WF_GIT_MODES
 
 _LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 _REALM = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _TOP = {
     "installation", "hosts", "tls", "contact", "realm", "extra_realms",
-    "context_root", "services", "templates", "overrides",
+    "context_root", "services", "templates", "overrides", "wf_git",
 }  # fmt: skip
 
 
@@ -37,6 +37,7 @@ class Description:
     services: tuple[str, ...]
     ref: str
     overrides: dict[str, str | list[str]] = field(default_factory=dict)
+    wf_git: str = "local"
 
     def host(self, label: str) -> str:
         return f"{label}.{self.suffix}" if self.suffix else label
@@ -111,6 +112,12 @@ def load(path: Path) -> Description:
     if not isinstance(ref, str) or not ref.strip():
         raise DescriptionError(f"{path}: templates.ref must be a non-empty text")
 
+    wf_git = data.get("wf_git", "local")
+    if wf_git not in WF_GIT_MODES:
+        raise DescriptionError(
+            f"{path}: wf_git must be one of {', '.join(WF_GIT_MODES)}: {wf_git!r}"
+        )
+
     overrides = data.get("overrides") or {}
     if not isinstance(overrides, dict):
         raise DescriptionError(f"{path}: overrides must be a mapping")
@@ -130,6 +137,7 @@ def load(path: Path) -> Description:
         services=tuple(s for s in SERVICES if s in services),
         ref=ref.strip(),
         overrides=clean,
+        wf_git=wf_git,
     )
 
 

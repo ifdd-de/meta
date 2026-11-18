@@ -8,3 +8,4 @@ type.demo.grid.example.ifdd.de
 unit.demo.grid.example.ifdd.de
 ts.demo.grid.example.ifdd.de
 wf.demo.grid.example.ifdd.de
+git.demo.grid.example.ifdd.de

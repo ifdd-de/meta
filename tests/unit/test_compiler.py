@@ -116,3 +116,31 @@ def test_differences_finds_missing_and_changed_files(tmp_path):
 def test_the_demo_files_of_the_repository_are_up_to_date():
     result = compiler.compile_description(load(DEMO / "installation.yaml"))
     assert compiler.differences(result, DEMO) == []
+
+
+def test_local_git_server_for_wf(tmp_path):
+    result = compiler.compile_description(
+        describe(tmp_path, "installation: x\nhosts:\n  suffix: a.example.org\n")
+    )
+    v = result.values
+    assert v["ifdd_wf_git_url"] == "https://git.a.example.org/kestra/flows.git"
+    assert v["ifdd_wf_git_username"] == "kestra"
+    assert v["ifdd_proxy_internal_hosts"].endswith("wf.a.example.org, git.a.example.org")
+    assert "git.a.example.org" in result.files["hosts.txt"].splitlines()
+    assert "wf_git: local\ngit_host: git.a.example.org\n" in result.files["ifdd-meta.yaml"]
+    assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
+
+
+def test_external_git_server_for_wf(tmp_path):
+    result = compiler.compile_description(
+        describe(
+            tmp_path,
+            "installation: x\nwf_git: external\noverrides:\n"
+            "  ifdd_wf_git_url: https://git.example.org/team/flows.git\n"
+            "  ifdd_wf_git_username: bot\n",
+        )
+    )
+    assert result.values["ifdd_wf_git_url"] == "https://git.example.org/team/flows.git"
+    assert "git" not in result.values["ifdd_proxy_internal_hosts"].split(", ")
+    assert "IFDD_META_WF_GIT_TOKEN=" in result.files[".env.example"]
+    assert "wf_git: external\n" in result.files["ifdd-meta.yaml"]

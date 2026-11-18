@@ -89,6 +89,10 @@ schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts and
 ts-api, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
 `down --purge` also removes volumes, networks and the instances, but keeps
 `proxy/letsencrypt/acme.json` in the persist directory; `create` puts it back.
+wf keeps its flows in Git. By default (`wf_git: local`) ifdd-meta runs a small
+Gitea for that behind the proxy under the host `git`; `up` starts it before wf
+and creates the user, the repository and the token for wf. With
+`wf_git: external` the description names the repository in its overrides and
 `IFDD_META_WF_GIT_TOKEN` (environment or `.env`) goes into wf as
 `SECRET_GIT_TOKEN`.
 

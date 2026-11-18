@@ -27,8 +27,9 @@ jobs:
     timeout-minutes: 75
     env:
       SETTINGS: ci-run/ifdd-meta.yaml
-      # wf needs a Git server for its flows (production); it follows in a later step.
-      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api
+      # Every service that runs (ct and model have nothing to start); wf brings
+      # the local Git server for its flows.
+      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf
     steps:
       - uses: actions/checkout@v7
 
@@ -79,6 +80,10 @@ jobs:
       - name: Services answer through the proxy
         run: |
           ca=ci-run/work/proxy/certs/ca.crt
+          # wf sits behind the login gate: oauth2-proxy answers with a redirect.
+          code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' https://wf/ || true)
+          echo "$code https://wf/ (expected 302)"
+          [ "$code" = 302 ] || failed=1
           for url in \
               https://id/realms/ifdd/.well-known/openid-configuration \
               https://rest/version \
@@ -87,7 +92,8 @@ jobs:
               https://type/v1/ \
               https://unit/v1/ \
               https://ts/api/health \
-              https://ts/tsapi/version; do
+              https://ts/tsapi/version \
+              https://git/api/healthz; do
             code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' "$url" || true)
             echo "$code $url"
             [ "$code" = 200 ] || failed=1

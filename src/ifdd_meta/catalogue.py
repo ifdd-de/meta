@@ -29,6 +29,11 @@ HOST_LABELS = {
 }
 #: Host label of the Traefik dashboard; it gets no network alias and no DNS record.
 DASHBOARD_LABEL = "proxy"
+#: Host label of the local Git server for the wf flows (setting wf_git: local).
+GIT_LABEL = "git"
+#: User and repository of the wf flows on the local Git server.
+GIT_USER = "kestra"
+GIT_REPOSITORY = "flows"
 
 #: Endings of variable names that would hold a secret; none may be a template variable.
 SECRET_ENDINGS = ("_secret", "_password", "_token")
@@ -90,6 +95,9 @@ NO_ROOT = ("keycloak", "ts")
 __all__ = [
     "CA_USERS",
     "DASHBOARD_LABEL",
+    "GIT_LABEL",
+    "GIT_REPOSITORY",
+    "GIT_USER",
     "HOST_LABELS",
     "NO_ROOT",
     "PERSIST",
