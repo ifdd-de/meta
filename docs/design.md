@@ -129,9 +129,9 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `build` | images of all or selected services | images |
 | `up` / `down` | start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
 | `status`, `logs` | state of all services; logs into a directory (CI artefacts) | nothing / log files |
-| `keycloak add-user`, `add-client`, `add-context-role` | the former `.adm_tools` scripts, for every realm of the instance | realm |
+| `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown. `add-user` and `add-context-role` follow | realm |
 | `demo load` | demo user and the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
-| `test` | integration tests against the running installation (section 8) | test data |
+| `test` | integration tests against the running installation (section 8); data only with the setting `tests: write` | test data |
 | `docs render` | the instance chapter (former `.adm_docs`) with the same variables | output directory |
 
 Every command takes `--only SERVICE[,…]`. Commands are idempotent where the
@@ -149,8 +149,8 @@ and prints the last 20 lines of the log. `--verbose` shows everything. Exit code
 | Level | Tool | Checks |
 |---|---|---|
 | unit | pytest with fakes for `cruft`, `docker` and `git` | the tool itself, without containers |
-| plumbing | pytest | health checks, network aliases and TLS (`proxy/adm_check_hosts.sh`), security headers and CSP |
-| API | pytest + HTTP client, tokens by client credentials | be: write, read, bitemporal history, 403 for a foreign context · ts-api: write, read, 422 for a wrong unit · schema/type/unit: content, CORS · ct pipeline writes into be and ts-api · wf runs a flow · Grafana data sources healthy |
+| plumbing | pytest | security headers and CSP of every route, dashboard of the proxy behind a password |
+| API | pytest + HTTP client (standard library), tokens by client credentials | Keycloak discovery and the service clients · be: 401 without token, write and read, unchanged write, valid time (`at`), domain contexts hidden, refused and filtered for a client without their pattern, CORS for the ui only · ts-api: write and read the latest sample, 422 for a wrong unit or value, read and write roles, 403 for a foreign store · schema/type/unit: JSON-LD, CORS `*` · ct pipelines into be (again: no new documents) and ts-api · wf: a flow goes to the Git server and is removed again · Grafana data sources healthy |
 | browser | Playwright (Chromium) | login through Keycloak (PKCE), ui shows the tabs, oauth2-proxy in front of wf |
 | security | `tools-pentest` (passive, outside view) | later |
 | upgrade | previous release → demo data → `update` → checks again | later |
@@ -162,16 +162,25 @@ uses a local Git server in the run, not GitHub. Each run keeps as artefacts: JUn
 report, container logs, image list with digests, `docker system df` and
 `docker stats`.
 
+The integration tests live in the package (`src/ifdd_meta/integration/`), so
+`ifdd-meta test` finds them wherever the tool is installed. They read the
+installation like the tool does (settings, variables file, instances); tests
+that write need the setting `tests: write` (default `read`, CI: `write`). For the
+context and store patterns they create a service client with the pattern
+`ops.example.ifdd.de` for the session and remove it afterwards. Assertions are
+not rewritten (`--assert=plain`), so a failure shows only the message of the
+test and never a token.
+
 ## 9. Repository layout
 
 ```
 README.md  LICENSE  CHANGELOG.md  pyproject.toml
 src/ifdd_meta/            # package: cli, settings, catalogue, steps, keycloak, docs
+src/ifdd_meta/integration/ # tests against a running installation (ifdd-meta test)
 config/demo/              # description of the public demo (the only example)
 docs/design.md            # this document
 docs/instances/           # cookiecutter template of the instance chapter (en, de)
 tests/unit/               # tests of the tool
-tests/integration/        # tests against a running installation
 .github/workflows/        # test.yml, integration.yml
 work/  state/             # in .gitignore
 ```

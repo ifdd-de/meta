@@ -58,3 +58,80 @@ def test_compile_reports_an_invalid_description(tmp_path):
 def test_unknown_option_is_a_usage_error():
     result = runner.invoke(app, ["--nope", "config", "show"])
     assert result.exit_code == 2
+
+
+def test_test_command_needs_a_settings_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    result = runner.invoke(app, ["test"])
+    assert result.exit_code == 1
+    assert "need a settings file" in result.output
+
+
+class FakeAdmin:
+    def __init__(self):
+        self.added = []
+        self.deleted = []
+        self.created_roles = [("ifdd", "ops.example.ifdd.de")]
+
+    def add_service_client(self, client_id, roles, default_scopes, create_roles):
+        self.added.append((client_id, roles, default_scopes, create_roles))
+        return "uuid-1"
+
+    def client_secret(self, uuid):
+        return "generated-secret"
+
+    def delete_client(self, uuid):
+        self.deleted.append(uuid)
+
+
+def add_client(tmp_path, monkeypatch, *args):
+    from ifdd_meta import keycloak
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    fake = FakeAdmin()
+    monkeypatch.setattr(keycloak.Admin, "from_settings", classmethod(lambda cls, s: fake))
+    return fake, runner.invoke(app, ["keycloak", "add-client", *args])
+
+
+def test_add_client_writes_the_secret_only_into_the_file(tmp_path, monkeypatch):
+    fake, result = add_client(
+        tmp_path, monkeypatch, "probe", "--secret-file", "probe.secret",
+        "--role", "ifdd:ifdd_nodes_ro", "--role", "ifdd:ops.example.ifdd.de",
+        "--role", "ifdd-ts-api:ifdd_ts_ro", "--default-scope", "ifdd_nodes_ro", "--create-roles",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert fake.added == [
+        (
+            "probe",
+            {"ifdd": ["ifdd_nodes_ro", "ops.example.ifdd.de"], "ifdd-ts-api": ["ifdd_ts_ro"]},
+            ["ifdd_nodes_ro"],
+            True,
+        )
+    ]
+    secret = tmp_path / "probe.secret"
+    assert secret.read_text() == "generated-secret"
+    assert secret.stat().st_mode & 0o777 == 0o600
+    assert "generated-secret" not in result.output
+    assert "created role ops.example.ifdd.de of ifdd" in result.output
+
+
+def test_add_client_refuses_an_existing_secret_file_and_bad_roles(tmp_path, monkeypatch):
+    (tmp_path / "probe.secret").write_text("old")
+    fake, result = add_client(tmp_path, monkeypatch, "probe", "--secret-file", "probe.secret")
+    assert result.exit_code == 1
+    assert "exists already" in result.output
+    assert fake.added == []
+    fake, result = add_client(
+        tmp_path, monkeypatch, "probe", "--secret-file", "new.secret", "--role", "ifdd_nodes_ro"
+    )
+    assert result.exit_code == 2
+    assert fake.added == []
+
+
+def test_add_client_removes_the_client_if_the_secret_cannot_be_written(tmp_path, monkeypatch):
+    fake, result = add_client(tmp_path, monkeypatch, "probe", "--secret-file", "no/dir/x.secret")
+    assert result.exit_code == 1
+    assert "target directory missing" in result.output
+    assert fake.deleted == ["uuid-1"]

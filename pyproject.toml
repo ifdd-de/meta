@@ -18,11 +18,12 @@ dependencies = [
     "typer~=0.29.1",
     "PyYAML~=6.0.3",
     "Jinja2~=3.1",
+    # Runs the integration tests (ifdd-meta test).
+    "pytest~=9.2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest~=9.2.0",
     "ruff~=0.17.5",
 ]
 
@@ -37,7 +38,7 @@ ifdd-meta = "ifdd_meta.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ifdd_meta = ["data/*.yaml"]
+ifdd_meta = ["data/*.yaml", "data/git/*.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

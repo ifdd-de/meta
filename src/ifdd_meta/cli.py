@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from . import __version__, check, compiler, create, services
+from . import __version__, check, compiler, copysecret, create, keycloak, services, testrun
 from .copysecret import SecretError
 from .description import DescriptionError
 from .description import load as load_description
@@ -24,6 +24,10 @@ app = typer.Typer(
 )
 config_app = typer.Typer(help="Inspect the configuration.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
+keycloak_app = typer.Typer(
+    help="Change the realm through the Keycloak admin API.", no_args_is_help=True
+)
+app.add_typer(keycloak_app, name="keycloak")
 
 
 def _version(value: bool) -> None:
@@ -250,6 +254,82 @@ def logs_command(
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from None
     typer.echo(f"{len(written)} log files in {output}")
+
+
+@app.command("test")
+def test_command(
+    ctx: typer.Context,
+    junit: Annotated[
+        Path | None, typer.Option(help="Write a JUnit XML report to this file.")
+    ] = None,
+    keyword: Annotated[
+        str | None, typer.Option("-k", help="Only the tests that match this pytest expression.")
+    ] = None,
+    exitfirst: Annotated[bool, typer.Option("-x", help="Stop at the first failure.")] = False,
+    verbose: VerboseOption = False,
+) -> None:
+    """Test the running installation (pytest). Writes data only with the setting tests: write."""
+    settings = _settings(ctx)
+    try:
+        code = testrun.run(
+            settings, ctx.obj["cli"], junit=junit, keyword=keyword, exitfirst=exitfirst,
+            verbose=verbose,
+        )  # fmt: skip
+    except ValueError as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    raise typer.Exit(code)
+
+
+def _role(value: str) -> tuple[str, str]:
+    owner, separator, role = value.partition(":")
+    if not (separator and owner and role):
+        raise typer.BadParameter(f"expected CLIENT:ROLE, got {value!r}", param_hint="--role")
+    return owner, role
+
+
+@keycloak_app.command("add-client")
+def keycloak_add_client(
+    ctx: typer.Context,
+    client_id: Annotated[str, typer.Argument(help="Id of the new service client.")],
+    secret_file: Annotated[
+        Path, typer.Option(help="New file (mode 0600) for the client secret; it is never shown.")
+    ],
+    role: Annotated[
+        list[str] | None,
+        typer.Option(help="CLIENT:ROLE, e.g. ifdd:ifdd_nodes_ro or ifdd:ops.example.ifdd.de."),
+    ] = None,
+    default_scope: Annotated[
+        list[str] | None, typer.Option(help="Default client scope, e.g. ifdd_nodes_ro.")
+    ] = None,
+    create_roles: Annotated[
+        bool, typer.Option(help="Create missing client roles (e.g. a new context pattern).")
+    ] = False,
+) -> None:
+    """Add a service client (client credentials) with client roles and scopes."""
+    settings = _settings(ctx)
+    roles: dict[str, list[str]] = {}
+    for owner, name in map(_role, role or []):
+        roles.setdefault(owner, []).append(name)
+    if secret_file.exists():
+        typer.echo(f"error: {secret_file} exists already", err=True)
+        raise typer.Exit(1)
+    try:
+        admin = keycloak.Admin.from_settings(settings)
+        client = admin.add_service_client(
+            client_id, roles, default_scopes=default_scope or [], create_roles=create_roles
+        )
+        try:
+            copysecret.write_file(secret_file, admin.client_secret(client), new_mode=0o600)
+        except (SecretError, OSError):
+            admin.delete_client(client)
+            raise
+    except (keycloak.KeycloakError, SecretError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    for created_owner, created_role in admin.created_roles:
+        typer.echo(f"created role {created_role} of {created_owner}")
+    typer.echo(f"created client {client_id}; secret in {secret_file}")
 
 
 def main() -> None:

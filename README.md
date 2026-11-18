@@ -101,7 +101,33 @@ and creates the user, the repository and the token for wf. With
 
 The workflow `integration.yml` runs `create`, `build` and `up` on a fresh GitHub
 runner with the real images and checks that every service answers through the
-proxy; logs, image digests and the use of disk and memory are kept as artefacts.
+proxy, then runs `ifdd-meta test` with `tests: write`; the JUnit report, logs,
+image digests and the use of disk and memory are kept as artefacts.
+
+## Test
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml test [-k EXPR] [-x] [-v] [--junit FILE]
+```
+
+`test` runs the integration tests of the package against the running
+installation (pytest): Keycloak, be, ts-api, schema/type/unit, the proxy
+headers, Grafana, and with test data the ct pipelines and the Git round trip of
+wf. Tests that write run only with the setting `tests: write`
+(`IFDD_META_TESTS=write`); the default `read` leaves the data alone. Tests of a
+service that is not installed are skipped.
+
+## Add a service client
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml keycloak add-client my-script \
+    --role ifdd:ifdd_nodes_ro --role ifdd:ops.example.ifdd.de --create-roles \
+    --default-scope ifdd_nodes_ro --secret-file my-script.secret
+```
+
+The client gets client credentials only, no full scope, the roles in its service
+account and in its scope mapping. The secret goes into a new file with mode
+0600 and is never shown.
 
 ## Configuration
 

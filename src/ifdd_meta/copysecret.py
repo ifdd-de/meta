@@ -42,12 +42,12 @@ def read_env(path: Path, variable: str) -> str:
     return value
 
 
-def write_file(path: Path, value: str) -> bool:
+def write_file(path: Path, value: str, new_mode: int = NEW_SECRET_FILE_MODE) -> bool:
     """Write a secret file; False if it already holds the value."""
     _check_directory(path)
     if path.is_file() and path.read_text(encoding="utf-8").strip() == value:
         return False
-    mode = path.stat().st_mode & 0o777 if path.exists() else NEW_SECRET_FILE_MODE
+    mode = path.stat().st_mode & 0o777 if path.exists() else new_mode
     _write_atomically(path, value, mode)
     return True
 

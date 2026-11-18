@@ -99,7 +99,7 @@ def provision(path: Path, compose: list[str], context: dict, kestra_env: Path, r
             path,
         )
 
-    token = _current_token(kestra_env)
+    token = current_token(kestra_env)
     if not token:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         token = _quiet(
@@ -135,7 +135,8 @@ def provision(path: Path, compose: list[str], context: dict, kestra_env: Path, r
         raise StepError(f"Git server: reading {owner}/{name} answered HTTP {status}")
 
 
-def _current_token(kestra_env: Path) -> str:
+def current_token(kestra_env: Path) -> str:
+    """The token of wf in wf/secrets/kestra.env; empty if not set yet."""
     for line in kestra_env.read_text(encoding="utf-8").splitlines():
         if line.startswith("SECRET_GIT_TOKEN="):
             value = line.split("=", 1)[1].strip()

@@ -223,6 +223,8 @@ def _settings(description: Description, name: str) -> str:
         "persist: state\n"
         f"wf_git: {description.wf_git}\n"
         f"git_host: {description.host(GIT_LABEL)}\n"
+        "# Integration tests (ifdd-meta test): read, or write to add test data\n"
+        "tests: read\n"
     )
 
 

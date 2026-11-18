@@ -18,6 +18,7 @@ def test_defaults_without_a_settings_file(tmp_path):
     assert settings["services"] == SERVICES
     assert settings["variables"] == tmp_path / "cookiecutter_all.yaml"
     assert set(settings.sources.values()) == {"default"}
+    assert settings["tests"] == "read"
 
 
 def test_precedence_cli_environment_dotenv_file_default(tmp_path):
@@ -109,6 +110,7 @@ def test_services_from_the_environment_are_comma_separated(tmp_path):
         ({"IFDD_META_WAIT_TIMEOUT": "soon"}, "expected a whole number"),
         ({"IFDD_META_WAIT_TIMEOUT": "0"}, "expected a positive whole number"),
         ({"IFDD_META_TEMPLATES_REF": " "}, "expected a non-empty string"),
+        ({"IFDD_META_TESTS": "all"}, "expected one of read, write"),
     ],
 )
 def test_invalid_values_name_field_and_source(tmp_path, environ, message):
