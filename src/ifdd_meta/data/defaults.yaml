@@ -46,7 +46,7 @@ default_context:
   # External Docker network of the services (shared: all except be/ui, which use proxy-net fixed)
   ifdd_proxy_network: "proxy-net"
   # Hosts that resolve to Traefik inside the proxy network (network aliases); also SANs of the certificate (derived)
-  ifdd_proxy_internal_hosts: "id, rest, ui, schema, type, unit, ts, wf"
+  ifdd_proxy_internal_hosts: "id, rest, ui, schema, type, unit, ts, wf, git"
   # Host of the Traefik dashboard (/dashboard/) (derived)
   ifdd_proxy_host: "proxy"
   # User of the Traefik dashboard; its password is generated into proxy/.env
@@ -548,9 +548,10 @@ default_context:
 
   # --- Git synchronisation of the flows (production only) ---
   # Repository of the flows, https without credentials; the token goes into secrets/kestra.env
-  ifdd_wf_git_url: "https://git.example.org/example/wf-content.git"
-  # User name for the Git server
-  ifdd_wf_git_username: "git"
+  # (derived with the local Git server of ifdd-meta, wf_git: local)
+  ifdd_wf_git_url: "https://git/kestra/flows.git"
+  # User name for the Git server; the owner of the repository (derived with wf_git: local)
+  ifdd_wf_git_username: "kestra"
   # Branch of the flows; it needs a first commit before the first start
   ifdd_wf_git_branch: "main"
   # Root namespaces that are pushed and restored, comma-separated

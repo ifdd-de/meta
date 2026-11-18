@@ -27,8 +27,9 @@ jobs:
     timeout-minutes: 75
     env:
       SETTINGS: ci-run/ifdd-meta.yaml
-      # wf needs a Git server for its flows (production); it follows in a later step.
-      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api
+      # Every service that runs (ct and model have nothing to start); wf brings
+      # the local Git server for its flows.
+      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf
     steps:
       - uses: actions/checkout@v7
 
@@ -53,8 +54,12 @@ jobs:
           if [ -z "$REF" ]; then
             REF=$(python -c 'import yaml; print(yaml.safe_load(open("config/demo/ifdd-meta.yaml"))["templates"]["ref"])')
           fi
+          # Names with a dot: Java clients (Kestra) send no SNI for names without one,
+          # and the production proxy refuses handshakes without SNI (sniStrict).
           cat > ci-run/installation.yaml <<EOF
           installation: ci
+          hosts:
+            suffix: ci.test
           tls: local-ca
           services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
           templates:
@@ -62,7 +67,7 @@ jobs:
           EOF
           ifdd-meta compile ci-run/installation.yaml
           ifdd-meta --settings "$SETTINGS" config check
-          grep -v '^#' ci-run/hosts.txt | sudo tee -a /etc/hosts
+          echo "127.0.0.1 $(grep -v '^#' ci-run/hosts.txt | tr '\n' ' ')" | sudo tee -a /etc/hosts
 
       - name: Create
         run: ifdd-meta --settings "$SETTINGS" create
@@ -79,15 +84,20 @@ jobs:
       - name: Services answer through the proxy
         run: |
           ca=ci-run/work/proxy/certs/ca.crt
+          # wf sits behind the login gate: oauth2-proxy answers with a redirect.
+          code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' https://wf.ci.test/ || true)
+          echo "$code https://wf.ci.test/ (expected 302)"
+          [ "$code" = 302 ] || failed=1
           for url in \
-              https://id/realms/ifdd/.well-known/openid-configuration \
-              https://rest/version \
-              https://ui/ \
-              https://schema/v1/ \
-              https://type/v1/ \
-              https://unit/v1/ \
-              https://ts/api/health \
-              https://ts/tsapi/version; do
+              https://id.ci.test/realms/ifdd/.well-known/openid-configuration \
+              https://rest.ci.test/version \
+              https://ui.ci.test/ \
+              https://schema.ci.test/v1/ \
+              https://type.ci.test/v1/ \
+              https://unit.ci.test/v1/ \
+              https://ts.ci.test/api/health \
+              https://ts.ci.test/tsapi/version \
+              https://git.ci.test/api/healthz; do
             code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' "$url" || true)
             echo "$code $url"
             [ "$code" = 200 ] || failed=1
@@ -112,6 +122,18 @@ jobs:
           fi
           cp -r ci-run/work/logs ci-run/artefacts/ifdd-meta 2>/dev/null || true
           python tools/ci/scrub_secrets.py ci-run/work ci-run/artefacts
+
+      - name: Error lines of the containers
+        if: failure()
+        run: |
+          python tools/ci/show_errors.py ci-run/work ci-run/artefacts/containers
+          if [ -d ci-run/work/wf ]; then
+            echo "::group::Kestra: logs of the Git flows"
+            docker compose --project-directory ci-run/work/wf -f ci-run/work/wf/docker-compose-production.yml \
+              exec -T kestra python3 - < tools/ci/kestra_logs.py 2>&1 \
+              | python tools/ci/show_errors.py ci-run/work -
+            echo "::endgroup::"
+          fi
 
       - uses: actions/upload-artifact@v7
         if: always()

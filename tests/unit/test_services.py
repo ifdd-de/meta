@@ -213,3 +213,28 @@ def test_secrets_are_not_shown_in_settings(tmp_path):
     s = load(cwd=tmp_path, environ={"IFDD_META_DEMO_PASSWORD": "pw"})
     assert s.secrets == {"IFDD_META_WF_GIT_TOKEN": "tok", "IFDD_META_DEMO_PASSWORD": "pw"}
     assert "tok" not in repr(s)
+
+
+def test_up_starts_the_git_server_before_wf(world, monkeypatch):
+    (world / "ifdd-meta.yaml").write_text("variables: vars.yaml\nwait_timeout: 7\nwf_git: local\n")
+    state_file = world / "work" / ".ifdd-meta" / "instances.json"
+    state = json.loads(state_file.read_text()) | {"git": "git"}
+    state_file.write_text(json.dumps(state))
+    (world / "work" / "git").mkdir()
+    provisioned = []
+    monkeypatch.setattr(
+        services.gitserver,
+        "provision",
+        lambda path, compose, context, kestra_env, run: provisioned.append((path.name, kestra_env)),
+    )
+    run, _ = run_for(world)
+    services.up(settings(world), run)
+    started = [c.split()[0] for c in calls(world) if " up " in c or "adm_02" in c]
+    assert started.index("git") == started.index("wf") - 1
+    assert provisioned == [("git", world / "work" / "wf" / "secrets" / "kestra.env")]
+    # without wf there is no Git server
+    assert "git" not in services._instances(settings(world), ["be"])
+    services.down(settings(world), run)
+    stopped = [c.split()[0] for c in calls(world) if " down " in c]
+    assert stopped.index("git") == stopped.index("wf") + 1
+    assert "git docker compose down --remove-orphans" in calls(world)

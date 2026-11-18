@@ -15,6 +15,7 @@ from pathlib import Path
 
 import yaml
 
+from . import gitserver
 from .catalogue import PERSIST, SERVICES
 from .create import STATE_DIR, CreateError, load_state, select
 from .runner import Run
@@ -34,6 +35,7 @@ START = (
     ("type", "all"),
     ("unit", "all"),
     ("proxy", "all"),
+    ("git", "git"),
     ("wf", "script"),
     ("ts", "script"),
     ("ts-api", "all"),
@@ -51,17 +53,29 @@ def _instances(settings: Settings, only: Iterable[str] | None) -> dict[str, Path
     if not state:
         raise CreateError(f"no instances in {settings['workdir']}; run 'create' first")
     wanted = select(settings, only)
-    return {
+    instances = {
         service: settings["workdir"] / state[service]
         for service in SERVICES
         if service in wanted and service in state
     }
+    if "wf" in instances and "git" in state and settings["wf_git"] == "local":
+        instances["git"] = settings["workdir"] / state["git"]
+    return instances
+
+
+def _compose_for(settings: Settings, service: str) -> list[str]:
+    """The Git server has one compose file; the instances one per environment."""
+    return ["docker", "compose"] if service == "git" else compose(settings)
 
 
 def build(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
     environment = settings["environment"]
     for service, path in _instances(settings, only).items():
         if service == "model":
+            continue
+        if service == "git":
+            run.overview("Pulling the image of the Git server for wf")
+            run.command(["docker", "compose", "pull"], cwd=path)
             continue
         run.overview(f"Building {service} ({environment})")
         if service in PULL_ONLY:
@@ -91,6 +105,16 @@ def up(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
         if service == "proxy" and phase == "traefik":
             run.overview(f"Starting proxy, Traefik only ({environment})")
             run.command([*compose(settings), "up", "--detach", *wait, TRAEFIK], cwd=path)
+        elif service == "git":
+            run.overview("Starting the Git server for wf")
+            run.command(["docker", "compose", "up", "--detach", *wait], cwd=path)
+            gitserver.provision(
+                path,
+                ["docker", "compose"],
+                _context(settings),
+                instances["wf"] / "secrets" / "kestra.env",
+                run,
+            )
         elif service == "wf":
             run.overview(f"Starting wf ({environment})")
             run.command(["./adm_02_run.sh", environment], cwd=path)
@@ -115,7 +139,7 @@ def down(
         if service not in instances or service in ("ct", "model"):
             continue
         run.overview(f"Stopping {service}" + (" and removing its volumes" if purge else ""))
-        command = [*compose(settings), "down", "--remove-orphans"]
+        command = [*_compose_for(settings, service), "down", "--remove-orphans"]
         run.command(command + (["--volumes"] if purge else []), cwd=instances[service])
     if not purge:
         return
@@ -139,7 +163,7 @@ def status(
         if service in ("ct", "model"):
             continue
         result = subprocess.run(
-            [*compose(settings), "ps", "--all", "--format", "json"],
+            [*_compose_for(settings, service), "ps", "--all", "--format", "json"],
             cwd=path,
             capture_output=True,
             text=True,
@@ -170,7 +194,7 @@ def logs(settings: Settings, run: Run, directory: Path) -> list[Path]:
         target = directory / f"{service}.log"
         with target.open("w", encoding="utf-8") as handle:
             subprocess.run(
-                [*compose(settings), "logs", "--no-color", "--timestamps"],
+                [*_compose_for(settings, service), "logs", "--no-color", "--timestamps"],
                 cwd=path,
                 stdout=handle,
                 stderr=subprocess.STDOUT,
@@ -181,8 +205,12 @@ def logs(settings: Settings, run: Run, directory: Path) -> list[Path]:
     return written
 
 
+def _context(settings: Settings) -> dict:
+    return yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
+
+
 def _networks(settings: Settings, instances: dict[str, Path]) -> list[str]:
-    context = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
+    context = _context(settings)
     networks = [context["ifdd_proxy_network"]]
     if "ts" in instances or "ts-api" in instances:
         networks.append(context["ifdd_ts_ingest_network"])

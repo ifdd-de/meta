@@ -14,7 +14,9 @@ import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from . import copysecret
+import yaml
+
+from . import copysecret, gitserver
 from .catalogue import CA_USERS, NO_ROOT, PERSIST, SECRET_COPIES, SERVICES, SKIPS, WHEELS
 from .runner import Run, StepError
 from .settings import Settings
@@ -44,7 +46,7 @@ def load_state(settings: Settings) -> dict[str, str]:
 def _save_state(settings: Settings, state: dict[str, str]) -> None:
     path = state_path(settings)
     path.parent.mkdir(parents=True, exist_ok=True)
-    ordered = {service: state[service] for service in SERVICES if service in state}
+    ordered = {key: state[key] for key in (*SERVICES, "git") if key in state}
     path.write_text(json.dumps(ordered, indent=2) + "\n", encoding="utf-8")
 
 
@@ -117,8 +119,19 @@ def create(
     _copy_wheels(settings, state, services, run)
     _certificates(settings, state, services, run)
     _secrets(settings, state, run)
-    _wf_git_token(settings, state, run)
+    if settings["wf_git"] == "local":
+        if "wf" in services:
+            network = _variables(settings)["ifdd_proxy_network"]
+            gitserver.prepare(workdir, settings["installation"], settings["git_host"], network, run)
+            state["git"] = gitserver.DIRECTORY
+            _save_state(settings, state)
+    else:
+        _wf_git_token(settings, state, run)
     return state
+
+
+def _variables(settings: Settings) -> dict:
+    return yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
 
 
 def _restore_persistent(settings: Settings, service: str, path: Path, run: Run) -> None:
