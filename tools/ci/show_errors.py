@@ -4,6 +4,7 @@
 For a failed CI run: the job log is easier to reach than the artefacts.
 
     show_errors.py WORKDIR LOGDIR
+    show_errors.py WORKDIR -        (mask standard input only)
 """
 
 from __future__ import annotations
@@ -18,17 +19,26 @@ PATTERN = re.compile(r"ERROR|Exception|FAILED|WARN|refused|denied|certificate|PK
 LINES = 60
 
 
+def mask(text: str, values: list[str]) -> str:
+    for value in values:
+        text = text.replace(value, "***")
+    return text
+
+
 def main(workdir: Path, logdir: Path) -> int:
     values = sorted(secret_values(workdir), key=len, reverse=True)
+    if str(logdir) == "-":
+        for line in sys.stdin:
+            print(mask(line.rstrip("\n"), values)[:600])
+        return 0
     for path in sorted(logdir.glob("*.log")):
-        hits = [line for line in path.read_text(errors="replace").splitlines() if PATTERN.search(line)]
+        text = path.read_text(errors="replace")
+        hits = [line for line in text.splitlines() if PATTERN.search(line)]
         if not hits:
             continue
         print(f"::group::{path.name}: {len(hits)} lines, the last {min(len(hits), LINES)}")
         for line in hits[-LINES:]:
-            for value in values:
-                line = line.replace(value, "***")
-            print(line[:400])
+            print(mask(line, values)[:400])
         print("::endgroup::")
     return 0
 

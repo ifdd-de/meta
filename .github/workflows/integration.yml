@@ -121,7 +121,15 @@ jobs:
 
       - name: Error lines of the containers
         if: failure()
-        run: python tools/ci/show_errors.py ci-run/work ci-run/artefacts/containers
+        run: |
+          python tools/ci/show_errors.py ci-run/work ci-run/artefacts/containers
+          if [ -d ci-run/work/wf ]; then
+            echo "::group::Kestra: logs of the Git flows"
+            docker compose --project-directory ci-run/work/wf -f ci-run/work/wf/docker-compose-production.yml \
+              exec -T kestra python3 - < tools/ci/kestra_logs.py 2>&1 \
+              | python tools/ci/show_errors.py ci-run/work -
+            echo "::endgroup::"
+          fi
 
       - uses: actions/upload-artifact@v7
         if: always()
