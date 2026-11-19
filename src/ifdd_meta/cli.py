@@ -20,6 +20,7 @@ from . import (
     localsetup,
     services,
     testrun,
+    update,
 )
 from .copysecret import SecretError
 from .description import DescriptionError
@@ -217,6 +218,22 @@ def build_command(ctx: typer.Context, only: OnlyOption = None, verbose: VerboseO
 def up_command(ctx: typer.Context, only: OnlyOption = None, verbose: VerboseOption = False):
     """Start the services in order and wait until they are healthy."""
     _run_step(ctx, "up", verbose, lambda s, r: services.up(s, r, _only(only)))
+
+
+@app.command("update")
+def update_command(
+    ctx: typer.Context,
+    check_only: Annotated[
+        bool, typer.Option("--check", help="Only show which instances would change.")
+    ] = False,
+    only: OnlyOption = None,
+    verbose: VerboseOption = False,
+):
+    """Merge the template changes up to the settings' references into the instances (cruft)."""
+    if check_only:
+        _run_step(ctx, "update-check", verbose, lambda s, r: update.check(s, r, _only(only)))
+    else:
+        _run_step(ctx, "update", verbose, lambda s, r: update.update(s, r, _only(only)))
 
 
 @app.command("down")

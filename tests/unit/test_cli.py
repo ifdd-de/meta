@@ -199,3 +199,14 @@ def test_demo_load_needs_instances(tmp_path, monkeypatch):
     result = runner.invoke(app, ["demo", "load"])
     assert result.exit_code == 1
     assert "no keycloak instance" in result.output
+
+
+def test_update_needs_instances(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    (tmp_path / "vars.yaml").write_text("default_context: {}\n")
+    (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\n")
+    for argv in (["update"], ["update", "--check"]):
+        result = runner.invoke(app, argv)
+        assert result.exit_code == 1
+        assert "no instances" in result.output
