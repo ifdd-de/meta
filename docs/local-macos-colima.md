@@ -308,7 +308,10 @@ resolve it there, commit, and run `update` again.
   remove-trusted-cert`, `delete-certificate -Z` with the SHA-1 fingerprint, the
   BSD form `sed -i ''`). It now prints the SHA-256 fingerprint; the usage text
   of `security delete-certificate` on macOS 27.0.1 lists "SHA-256 (or SHA-1)".
-- Not run on a Mac yet: the mount check of `ifdd-meta up`, the Grafana login
-  of the demo user, `delete-certificate -Z` with SHA-256, and `update`
-  (section 13; tested on Linux from v26.11.1 to the demo's references against
-  a fresh create).
+- Tested on that Mac afterwards, section 13: all templates created at v26.11.1,
+  then `update` to the demo's references, `build`, `up`, `test`. Before the
+  update `ifdd-meta test` gave 42 passed and the expected failure of
+  `test_ui_without_read_role_shows_a_hint_and_no_aspects` (the hint comes with
+  ui 26.11.2); after it 43 passed. This covers the mount check of `up`, the
+  Grafana login of the demo user and the update of a running installation.
+- Not run on a Mac yet: `delete-certificate -Z` with SHA-256.
