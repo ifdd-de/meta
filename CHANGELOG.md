@@ -5,6 +5,8 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- CI: GitHub Actions pinned to commit SHAs (version as comment),
+  `persist-credentials: false` on every checkout.
 - `ifdd-meta update [--check] [--only …]`: later template changes into the
   existing instances with `cruft update`, one commit per instance; the result
   equals a fresh `create` at the new references (shared values from the
