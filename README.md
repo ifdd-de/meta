@@ -164,6 +164,7 @@ without lab both stay empty. Its user image needs about 3 GB, twice with
 Docker-in-Docker. Until lab has a release, a description that uses it, and
 `config check` for every description, needs a commit of lab under
 `templates.refs` (as in `config/demo/installation.yaml`).
+
 wf keeps its flows in Git. By default (`wf_git: local`) ifdd-meta runs a small
 Gitea for that behind the proxy under the host `git`; `up` starts it before wf
 and creates the user, the repository and the token for wf. With
