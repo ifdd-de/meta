@@ -30,11 +30,18 @@ jobs:
       SETTINGS: ci-run/ifdd-meta.yaml
       # Every service that runs (ct and model have nothing to start); wf brings
       # the local Git server for its flows.
-      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf
+      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf,lab
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          # lab adds about 7 GB (user image on the host and again in Docker-in-Docker);
+          # the runner's preinstalled SDKs are not needed here.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -71,7 +78,7 @@ jobs:
           hosts:
             suffix: ci.test
           tls: local-ca
-          services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
+          services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, lab, model]
           templates: $TEMPLATES
           EOF
           ifdd-meta compile ci-run/installation.yaml
@@ -116,7 +123,8 @@ jobs:
               https://unit.ci.test/v1/ \
               https://ts.ci.test/api/health \
               https://ts.ci.test/tsapi/version \
-              https://git.ci.test/api/healthz; do
+              https://git.ci.test/api/healthz \
+              https://lab.ci.test/hub/health; do
             code=$(curl -sS --cacert "$ca" -o /dev/null -w '%{http_code}' "$url" || true)
             echo "$code $url"
             [ "$code" = 200 ] || failed=1
@@ -190,6 +198,14 @@ jobs:
       - name: Down
         if: always()
         run: |
-          if [ -f ci-run/work/.ifdd-meta/instances.json ]; then
+          state=ci-run/work/.ifdd-meta/instances.json
+          if [ -f "$state" ]; then
+            lab=$(python -c 'import json, sys; print(json.load(open(sys.argv[1])).get("lab", ""))' "$state")
             ifdd-meta --settings "$SETTINGS" down --purge
+            if [ -n "$lab" ]; then
+              # The homes of lab survive --purge (volume dind-data); a fresh runner discards them.
+              docker volume inspect "${lab}_dind-data" > /dev/null
+              echo "kept ${lab}_dind-data"
+              docker volume rm "${lab}_dind-data"
+            fi
           fi

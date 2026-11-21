@@ -17,6 +17,7 @@ VARIABLES = {
     "ifdd_keycloak_wf_admin_group": "ifdd_wf_admins",
     "ifdd_context_root": "ifdd.de",
     "ifdd_ts_role_viewer": "readonly",
+    "ifdd_keycloak_lab_users_group": "ifdd_lab_users",
 }
 
 
@@ -119,3 +120,14 @@ def test_errors(tmp_path):
     settings = installation(tmp_path / "ct", ALL, ct_exit=3)
     with pytest.raises(StepError, match="exit code 3"):
         run_load(settings, FakeAdmin())
+
+
+def test_lab_users_group_only_with_lab(tmp_path):
+    admin = FakeAdmin()
+    run_load(installation(tmp_path / "a", {"keycloak": "keycloak", "lab": "lab"}), admin)
+    groups = admin.users["ifdd-demo"]["groups"]
+    assert "ifdd_lab_users" in groups
+    assert not any("admin" in g for g in groups if "lab" in g)  # users, not admins
+    admin = FakeAdmin()
+    run_load(installation(tmp_path / "b", {"keycloak": "keycloak"}), admin)
+    assert "ifdd_lab_users" not in admin.users["ifdd-demo"]["groups"]

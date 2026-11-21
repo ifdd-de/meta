@@ -2,7 +2,7 @@
 
 The commands use the paths an operator would use: ``docker compose`` with the
 compose file of the environment, and the ``adm_*`` scripts where an instance
-has them (ct, ts, wf).
+has them (ct, ts, wf, lab).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 from . import gitserver
-from .catalogue import PERSIST, SERVICES
+from .catalogue import PERSIST, PERSIST_VOLUMES, SERVICES
 from .create import STATE_DIR, STATE_FILE, CreateError, load_state, select
 from .runner import Run
 from .settings import Settings
@@ -39,6 +39,8 @@ START = (
     ("wf", "script"),
     ("ts", "script"),
     ("ts-api", "all"),
+    # lab last: its hub needs Keycloak (login) and be (the notebooks' data).
+    ("lab", "script"),
 )
 #: Compose service of Traefik in the proxy instance.
 TRAEFIK = "proxy"
@@ -86,6 +88,8 @@ def build(settings: Settings, run: Run, only: Iterable[str] | None = None) -> No
             run.command(["./adm_01_build.sh"], cwd=path)
         elif service == "wf":
             run.command(["./adm_01_build.sh", environment], cwd=path)
+        elif service == "lab":
+            run.command(["./adm_01_build.sh"], cwd=path)
         elif service not in PULL_ONLY:
             run.command([*compose(settings), "build"], cwd=path)
 
@@ -95,10 +99,11 @@ def up(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
     environment = settings["environment"]
     wait = ["--wait", "--wait-timeout", str(settings["wait_timeout"])]
     check_mounts(settings, run)
-    for network in _networks(settings, instances):
+    for network, internal in _networks(settings, instances):
         if not _docker_ok(["docker", "network", "inspect", network]):
-            run.overview(f"Creating network {network}")
-            run.command(["docker", "network", "create", network], cwd=settings["workdir"])
+            run.overview(f"Creating network {network}" + (" (internal)" if internal else ""))
+            create_net = ["docker", "network", "create", *(["--internal"] if internal else [])]
+            run.command([*create_net, network], cwd=settings["workdir"])
     for service, phase in START:
         if service not in instances:
             continue
@@ -122,6 +127,11 @@ def up(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
         elif service == "ts":
             run.overview(f"Starting ts ({environment})")
             run.command(["./adm_02_run.sh", environment, *wait], cwd=path)
+        elif service == "lab":
+            # Production only (the template has no development compose file);
+            # the script loads the user images into Docker-in-Docker and waits.
+            run.overview("Starting lab")
+            run.command(["./adm_02_run.sh"], cwd=path)
         else:
             label = "proxy, all services" if service == "proxy" else service
             run.overview(f"Starting {label} ({environment})")
@@ -139,12 +149,17 @@ def down(
     for service in order:
         if service not in instances or service in ("ct", "model"):
             continue
+        keep = PERSIST_VOLUMES.get(service, ()) if purge else ()
         run.overview(f"Stopping {service}" + (" and removing its volumes" if purge else ""))
         command = [*_compose_for(settings, service), "down", "--remove-orphans"]
-        run.command(command + (["--volumes"] if purge else []), cwd=instances[service])
+        if purge and not keep:
+            command.append("--volumes")
+        run.command(command, cwd=instances[service])
+        if keep:
+            _remove_volumes_except(settings, service, instances[service], keep, run)
     if not purge:
         return
-    for network in _networks(settings, instances):
+    for network, _ in _networks(settings, instances):
         if _docker_ok(["docker", "network", "inspect", network]):
             run.overview(f"Removing network {network}")
             run.command(["docker", "network", "rm", network], cwd=settings["workdir"])
@@ -247,12 +262,47 @@ def _context(settings: Settings) -> dict:
     return yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
 
 
-def _networks(settings: Settings, instances: dict[str, Path]) -> list[str]:
+def _networks(settings: Settings, instances: dict[str, Path]) -> list[tuple[str, bool]]:
+    """(name, internal) of the external networks the instances share."""
     context = _context(settings)
-    networks = [context["ifdd_proxy_network"]]
+    networks = [(context["ifdd_proxy_network"], False)]
     if "ts" in instances or "ts-api" in instances:
-        networks.append(context["ifdd_ts_ingest_network"])
+        networks.append((context["ifdd_ts_ingest_network"], False))
+    if "lab" in instances:
+        # No route outside; the proxy joins it (ifdd_proxy_extra_networks).
+        networks.append((context["ifdd_lab_network"], True))
     return networks
+
+
+def _remove_volumes_except(
+    settings: Settings, service: str, path: Path, keep: tuple[str, ...], run: Run
+) -> None:
+    """Removes the Compose volumes of an instance except ``keep`` (``down --purge``).
+
+    A new instance of the same name (same Compose project) finds the kept
+    volumes again; ``docker volume rm`` removes them for good.
+    """
+    config = subprocess.run(
+        [*compose(settings), "config", "--format", "json"],
+        cwd=path, capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    if config.returncode != 0:
+        raise CreateError(f"{service}: docker compose config failed: {config.stderr.strip()}")
+    project = json.loads(config.stdout)["name"]
+    listed = subprocess.run(
+        [
+            "docker", "volume", "ls", "--quiet", "--filter",
+            f"label=com.docker.compose.project={project}",
+        ],
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    for volume in listed.stdout.split():
+        if volume.removeprefix(f"{project}_") in keep:
+            run.overview(
+                f"Kept volume {volume} ({service}); remove it with: docker volume rm {volume}"
+            )
+        else:
+            run.command(["docker", "volume", "rm", volume], cwd=settings["workdir"])
 
 
 def _keep_persistent(settings: Settings, instances: dict[str, Path], run: Run) -> None:

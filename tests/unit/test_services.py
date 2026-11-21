@@ -15,11 +15,15 @@ FAKE_DOCKER = """#!/bin/sh
 echo "$(basename "$PWD") docker $*" >> "$CALLS"
 case "$*" in
   "network inspect"*) [ -f "$NETWORKS/$3" ] ;;
-  "network create"*) touch "$NETWORKS/$3" ;;
+  "network create"*) eval "last=\\${$#}"; touch "$NETWORKS/$last" ;;
   "network rm"*) rm -f "$NETWORKS/$3" ;;
   *" ps --all --format json")
     echo '{"Name":"'"$(basename "$PWD")"'-1","State":"running","Health":"healthy"}' ;;
   *" logs "*) echo "log of $(basename "$PWD")" ;;
+  *" config --format json") echo '{"name": "'"$(basename "$PWD")"'"}' ;;
+  "volume ls "*)  # the volumes of the project named in the filter
+    project=${5#label=com.docker.compose.project=}
+    printf '%s\n' "${project}_dind-data" "${project}_postgres-data" "${project}_dind-socket" ;;
   "run "*)  # the mount check: exit code from $RUN_EXIT (1: file not seen)
     [ -n "$RUN_EXIT" ] && { echo "docker says no" >&2; exit "$RUN_EXIT"; }
     case "$*" in *"/.ifdd-meta:/check:ro traefik:v9 -c test -f /check/instances.json") ;;
@@ -58,9 +62,12 @@ def world(tmp_path, monkeypatch):
     (work / ".ifdd-meta" / "instances.json").write_text(json.dumps(state))
     (tmp_path / "vars.yaml").write_text(
         "default_context:\n  ifdd_proxy_network: net-a\n  ifdd_ts_ingest_network: net-b\n"
-        "  ifdd_proxy_traefik_version: v9\n"
+        "  ifdd_lab_network: net-c\n  ifdd_proxy_traefik_version: v9\n"
     )
-    (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\nwait_timeout: 7\n")
+    # every service, lab included (it is optional)
+    (tmp_path / "ifdd-meta.yaml").write_text(
+        f"variables: vars.yaml\nwait_timeout: 7\nservices: [{', '.join(SERVICES)}]\n"
+    )
     return tmp_path
 
 
@@ -95,6 +102,7 @@ def test_build_uses_compose_and_the_adm_scripts(world):
         "time-series adm_01_plugins.sh ",
         f"time-series-api {compose} build",
         "wf adm_01_build.sh production",
+        "lab adm_01_build.sh ",
     ]
     assert lines[0] == "==> Building proxy (production)"
 
@@ -108,6 +116,7 @@ def test_up_creates_networks_and_keeps_the_order(world):
     assert [c for c in calls(world) if "network create" in c] == [
         "work docker network create net-a",
         "work docker network create net-b",
+        "work docker network create --internal net-c",
     ]
     assert started == [
         f"proxy {compose} up --detach {wait} proxy",
@@ -121,10 +130,11 @@ def test_up_creates_networks_and_keeps_the_order(world):
         "wf adm_02_run.sh production",
         f"time-series adm_02_run.sh production {wait}",
         f"time-series-api {compose} up --detach {wait}",
+        "lab adm_02_run.sh ",
     ]
     # networks that exist are not created again
     services.up(settings(world), run)
-    assert len([c for c in calls(world) if "network create" in c]) == 2
+    assert len([c for c in calls(world) if "network create" in c]) == 3
 
 
 def test_up_checks_first_that_docker_sees_the_work_directory(world, monkeypatch):
@@ -165,10 +175,18 @@ def test_down_and_purge_keep_the_acme_state(world):
     services.down(s, run, purge=True)
     stopped = [c.split()[0] for c in calls(world) if " down " in c]
     assert stopped == [
-        "time-series-api", "time-series", "wf", "proxy", "unit", "type",
+        "lab", "time-series-api", "time-series", "wf", "proxy", "unit", "type",
         "schema", "frontend", "backend", "keycloak",
     ]  # fmt: skip
-    assert all("--volumes" in c for c in calls(world) if " down " in c)
+    downs = [c for c in calls(world) if " down " in c]
+    assert all("--volumes" in c for c in downs if not c.startswith("lab "))
+    # lab keeps the Docker-in-Docker data (the homes): no --volumes, the others removed
+    assert "lab docker compose -f docker-compose-production.yml down --remove-orphans" in downs
+    removed = [c for c in calls(world) if "volume rm" in c]
+    assert removed == [
+        "work docker volume rm lab_postgres-data",
+        "work docker volume rm lab_dind-socket",
+    ]
     assert sorted(p.name for p in (world / "work").iterdir()) == ["logs"]
     kept = world / "state" / "proxy" / "letsencrypt" / "acme.json"
     assert kept.read_text() == "{}"

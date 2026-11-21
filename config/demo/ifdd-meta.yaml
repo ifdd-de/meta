@@ -7,11 +7,14 @@ templates:
   source: https://github.com/ifdd-de
   ref: v26.11.2
   refs:
+    proxy: 1315c0f76ed3d248d417838289ca6418ae769849
+    keycloak: ea2c59b21d1c08867517675f22c4588ca88e5f4a
     schema: v26.11.1
     type: v26.11.1
     unit: v26.11.1
     ct: v26.11.1
     ts: v26.11.1
+    lab: 6a0cf729321ae71cd4a16ca3e169df08f7ea7f83
     model: v26.11.1
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 workdir: work

@@ -211,3 +211,32 @@ def test_public_names_with_own_certificates_give_dns_records(tmp_path):
     hosts = compiler.compile_description(describe(tmp_path, text)).files["hosts.txt"]
     assert "127.0.0.1" not in hosts and "BEGIN" not in hosts
     assert hosts.splitlines()[-1] == "git.a.example.org"
+
+
+def test_lab_gets_its_client_network_and_host(tmp_path):
+    text = "installation: x\nhosts:\n  suffix: a.test\nservices: [proxy, keycloak, be, lab]\n"
+    v = compiler.compile_description(describe(tmp_path, text)).values
+    assert v["ifdd_keycloak_lab_client_id"] == "ifdd-lab"
+    assert v["ifdd_proxy_extra_networks"] == v["ifdd_lab_network"] == "lab-net"
+    assert v["ifdd_lab_host"] == "lab.a.test"
+    assert "lab.a.test" in v["ifdd_proxy_internal_hosts"].split(", ")
+    assert v["ifdd_oidc_realm"] == "https://id.a.test/realms/ifdd"
+    assert v["ifdd_be_url"] == "https://rest.a.test"
+    assert v["ifdd_lab_internet"][0] == "n"  # no internet by default
+
+
+def test_without_lab_no_client_and_no_network(tmp_path):
+    text = "installation: x\nhosts:\n  suffix: a.test\n"
+    v = compiler.compile_description(describe(tmp_path, text)).values
+    assert v["ifdd_keycloak_lab_client_id"] == ""
+    assert v["ifdd_proxy_extra_networks"] == ""
+    assert "lab.a.test" not in v["ifdd_proxy_internal_hosts"]
+
+
+def test_a_renamed_lab_network_reaches_the_proxy(tmp_path):
+    text = (
+        "installation: x\nservices: [proxy, keycloak, be, lab]\n"
+        "overrides:\n  ifdd_lab_network: other-net\n"
+    )
+    v = compiler.compile_description(describe(tmp_path, text)).values
+    assert v["ifdd_proxy_extra_networks"] == v["ifdd_lab_network"] == "other-net"

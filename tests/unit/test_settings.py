@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ifdd_meta.settings import SERVICES, SettingsError, load
+from ifdd_meta.settings import DEFAULT_SERVICES, SERVICES, SettingsError, load
 
 
 def write(path: Path, text: str) -> Path:
@@ -15,7 +15,8 @@ def test_defaults_without_a_settings_file(tmp_path):
     settings = load(cwd=tmp_path, environ={})
     assert settings.file is None
     assert settings["templates.ref"] == "main"
-    assert settings["services"] == SERVICES
+    assert settings["services"] == DEFAULT_SERVICES
+    assert "lab" in SERVICES and "lab" not in DEFAULT_SERVICES  # only on request
     assert settings["variables"] == tmp_path / "cookiecutter_all.yaml"
     assert set(settings.sources.values()) == {"default"}
     assert settings["tests"] == "read"

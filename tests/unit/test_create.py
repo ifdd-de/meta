@@ -23,13 +23,15 @@ FILES = {
     },
     "keycloak": {
         ".env": "IFDD_KEYCLOAK_PROXY_CLIENT_SECRET=proxy1\nIFDD_KEYCLOAK_TS_CLIENT_SECRET=ts1\n"
-        "IFDD_KEYCLOAK_CT_CLIENT_SECRET=ct1\nIFDD_KEYCLOAK_API_CLIENT_SECRET=api1\n",
+        "IFDD_KEYCLOAK_CT_CLIENT_SECRET=ct1\nIFDD_KEYCLOAK_API_CLIENT_SECRET=api1\n"
+        "IFDD_KEYCLOAK_LAB_CLIENT_SECRET=lab1\n",
     },
     "be": {"certs/README.md": "x"},
     "ct": {"certs/README.md": "x", ".env": "IFDD_CT_OIDC_CLIENT_SECRET=\n"},
     "ts": {"certs/README.md": "x", "secrets/oidc_client_secret": ""},
     "ts-api": {"certs/README.md": "x"},
     "wf": {"certs/README.md": "x", "secrets/kestra.env": "SECRET_IFDD_API_CLIENT_SECRET=\n"},
+    "lab": {"certs/README.md": "x", "secrets/README.md": "x"},
 }
 
 
@@ -105,7 +107,8 @@ def run_create(settings, only=None, is_root=lambda: False):
 
 
 def test_create_everything(tmp_path, templates):
-    settings = settings_for(tmp_path, templates)
+    # lab only on request (OPTIONAL_SERVICES): named here to create every service.
+    settings = settings_for(tmp_path, templates, f"services: [{', '.join(SERVICES)}]\n")
     state, lines = run_create(settings)
     work = settings["workdir"]
 
@@ -116,17 +119,20 @@ def test_create_everything(tmp_path, templates):
         assert cruft["skip"] == list(SKIPS[service])
         assert cruft["checkout"] == "v1"
     # local CA in every service that calls others through the proxy
-    for directory in ("backend", "ct", "time-series", "time-series-api", "wf"):
+    for directory in ("backend", "ct", "time-series", "time-series-api", "wf", "lab"):
         assert (work / directory / "certs" / "ca.crt").read_text() == "CA\n"
     assert not (work / "frontend" / "certs").exists()
     # client secrets
     assert (work / "proxy/secrets/oauth2_proxy_client_secret").read_text() == "proxy1"
     assert (work / "time-series/secrets/oidc_client_secret").read_text() == "ts1"
     assert "IFDD_CT_OIDC_CLIENT_SECRET=ct1" in (work / "ct/.env").read_text()
+    lab_secret = work / "lab/secrets/oidc_client_secret"
+    assert lab_secret.read_text() == "lab1"
+    assert oct(lab_secret.stat().st_mode & 0o777) == "0o600"
     kestra = (work / "wf/secrets/kestra.env").read_text().strip().split("=", 1)[1]
     assert base64.b64decode(kestra).decode() == "api1"
     assert lines[0] == "==> Creating proxy (v1)"
-    assert not any("proxy1" in line or "api1" in line for line in lines)
+    assert not any("proxy1" in line or "api1" in line or "lab1" in line for line in lines)
     # every instance is a local Git repository: one commit, clean, no remote
     for service, directory in state.items():
         path = work / directory

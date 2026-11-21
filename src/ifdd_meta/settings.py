@@ -22,8 +22,11 @@ from . import envfile
 #: Services in the order of the catalogue (the start order is defined there).
 SERVICES = (
     "proxy", "keycloak", "be", "ui", "schema", "type", "unit",
-    "ct", "ts", "ts-api", "wf", "model",
+    "ct", "ts", "ts-api", "wf", "lab", "model",
 )  # fmt: skip
+#: Services an installation gets only when its description or settings name them.
+OPTIONAL_SERVICES = ("lab",)
+DEFAULT_SERVICES = tuple(s for s in SERVICES if s not in OPTIONAL_SERVICES)
 ENVIRONMENTS = ("production", "development")
 TLS_MODES = ("local-ca", "letsencrypt", "own")
 WF_GIT_MODES = ("local", "external")
@@ -69,7 +72,7 @@ FIELDS = (
     Field("templates.source", "str", "https://github.com/ifdd-de"),
     Field("templates.ref", "str", "main"),
     Field("templates.refs", "mapping", {}),
-    Field("services", "list", list(SERVICES), SERVICES),
+    Field("services", "list", list(DEFAULT_SERVICES), SERVICES),
     Field("workdir", "path", "work"),
     Field("persist", "path", "state"),
     Field("wheels", "mapping", {}),

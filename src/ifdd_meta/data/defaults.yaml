@@ -20,8 +20,9 @@
 #   listed under the service that owns the value.
 # - "derived" marks values that compile computes; the value here is the one
 #   for short host names (id, rest, ui, …) and a local CA.
-# - Checked against the templates at v26.11.2 (keycloak, proxy, be, ui, ts-api,
-#   wf) and v26.11.1 (the others, which have no release 26.11.2).
+# - Checked against the templates at v26.11.2 (be, ui, ts-api, wf), v26.11.1
+#   (schema, type, unit, ct, ts, model) and the commits of keycloak, proxy and
+#   lab in config/demo/installation.yaml (lab has no release yet).
 
 default_context:
 
@@ -46,6 +47,8 @@ default_context:
   # --- Network and hosts ---
   # External Docker network of the services (shared: all except be/ui, which use proxy-net fixed)
   ifdd_proxy_network: "proxy-net"
+  # Further networks the proxy joins with the same aliases, comma-separated; the lab network with lab (derived)
+  ifdd_proxy_extra_networks: ""
   # Hosts that resolve to Traefik inside the proxy network (network aliases); also SANs of the certificate (derived)
   ifdd_proxy_internal_hosts: "id, rest, ui, schema, type, unit, ts, wf, git"
   # Host of the Traefik dashboard (/dashboard/) (derived)
@@ -256,6 +259,13 @@ default_context:
   ifdd_keycloak_ts_ingest_client_id: "ifdd-ts-ingest"
   # Hosts behind the oauth2-proxy gate, comma-separated (redirect URIs of ifdd-proxy) (derived)
   ifdd_keycloak_proxy_gate_hosts: "wf"
+  # Confidential client of the lab hub (shared: lab); "ifdd-lab" with lab, empty without: no client,
+  # no lab groups (derived)
+  ifdd_keycloak_lab_client_id: ""
+  # Group whose members get a lab server (shared: lab)
+  ifdd_keycloak_lab_users_group: "ifdd_lab_users"
+  # Group of the lab admins (/hub/admin) (shared: lab)
+  ifdd_keycloak_lab_admins_group: "ifdd_lab_admins"
 
   # ===========================================================================
   # 4. Backend (be)
@@ -566,3 +576,46 @@ default_context:
   ifdd_model_prj_name: "Model"
   # Directory name of the instance, derived from the name
   ifdd_model_prj_slug: "{{ cookiecutter.ifdd_model_prj_name|lower|replace(' ', '_') }}"
+
+  # ===========================================================================
+  # 11. Lab (JupyterHub, one container per user; only with lab in the services)
+  # ===========================================================================
+
+  # Display name of the lab instance
+  ifdd_lab_prj_name: "Lab"
+  # Directory name and compose project of the instance, derived from the name
+  ifdd_lab_prj_slug: "{{ cookiecutter.ifdd_lab_prj_name|lower|replace(' ', '-') }}"
+  # Host name of the hub (shared: keycloak, redirect URI of the lab client) (derived)
+  ifdd_lab_host: "lab"
+  # Traefik entrypoint of the router
+  ifdd_lab_entrypoint: "websecure"
+  # Internet and Git panel in the user servers: n = none (default), y = both
+  ifdd_lab_internet:
+    - "n"
+    - "y"
+  # dind: own Docker daemon for the user servers; socket: Docker socket of the host
+  ifdd_lab_docker_mode:
+    - "dind"
+    - "socket"
+  # Internal network of hub and user servers; the proxy joins it (ifdd_proxy_extra_networks)
+  ifdd_lab_network: "lab-net"
+
+  # --- Images ---
+  # Base image of the hub
+  ifdd_lab_hub_base_image: "node:26-slim"
+  # Base image of the user servers (Jupyter Docker Stacks)
+  ifdd_lab_kernel_base_image: "quay.io/jupyter/minimal-notebook:2026-11-16"
+  # PostgreSQL image of the hub database
+  ifdd_lab_postgres_image: "postgres:18"
+  # Docker-in-Docker image
+  ifdd_lab_dind_image: "docker:29.9.2-dind"
+  # Images of the user servers, comma-separated; each is images/<name>/ of the instance
+  ifdd_lab_images: "default"
+
+  # --- Limits per user server ---
+  # Memory: bytes with an optional K, M, G or T
+  ifdd_lab_mem_limit: "2G"
+  # Number of CPUs
+  ifdd_lab_cpu_limit: "1"
+  # Seconds without activity until the idle culler stops a server (at least 300)
+  ifdd_lab_idle_timeout: "3600"

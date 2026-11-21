@@ -1,8 +1,9 @@
 """``ifdd-meta demo load``: the demo user and the example data of ct.
 
 The demo user ``ifdd-demo`` reads and writes every domain context, gets
-into wf and views the Grafana dashboards of ts (realm role
-``ifdd_ts_role_viewer``). Its password comes from ``IFDD_META_DEMO_PASSWORD`` (environment or
+into wf, views the Grafana dashboards of ts (realm role
+``ifdd_ts_role_viewer``) and gets a lab server (users group, not admins).
+Its password comes from ``IFDD_META_DEMO_PASSWORD`` (environment or
 ``.env`` next to the settings file); without one a new password is generated
 and written into that ``.env`` (mode 0600). The password is never shown.
 
@@ -34,7 +35,7 @@ class DemoError(CreateError):
 
 
 def groups(variables: dict, services: set[str]) -> list[str]:
-    """Readers, writers, privileged, the wf group (with wf) and the context root."""
+    """Readers, writers, privileged, the wf and lab groups (with them) and the context root."""
     names = [
         variables["ifdd_keycloak_group_nodes_readers"],
         variables["ifdd_keycloak_group_nodes_writers"],
@@ -42,6 +43,8 @@ def groups(variables: dict, services: set[str]) -> list[str]:
     ]
     if "wf" in services:
         names.append(variables["ifdd_keycloak_wf_admin_group"])
+    if "lab" in services:
+        names.append(variables["ifdd_keycloak_lab_users_group"])
     names.append(f"ifdd_ctx_{variables['ifdd_context_root']}")
     return names
 

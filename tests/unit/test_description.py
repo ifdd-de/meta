@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from ifdd_meta.description import DescriptionError, load
-from ifdd_meta.settings import SERVICES
+from ifdd_meta.settings import DEFAULT_SERVICES
 
 
 def describe(tmp_path: Path, text: str) -> Path:
@@ -18,7 +18,7 @@ def test_minimal_description_takes_the_defaults(tmp_path):
     assert description.host("id") == "id"
     assert description.tls == "local-ca"
     assert description.realm == "ifdd"
-    assert description.services == SERVICES
+    assert description.services == DEFAULT_SERVICES
     assert description.ref == "main"
 
 

@@ -150,10 +150,20 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml down [--purge]
 container of the Traefik image looks for the state file; a daemon in a VM such
 as Colima sees only shared directories), then creates the Docker networks,
 starts Traefik alone, then keycloak, be, ui,
-schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts and
-ts-api, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
+schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts,
+ts-api and lab, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
 `down --purge` also removes volumes, networks and the instances, but keeps
-`proxy/letsencrypt/acme.json` in the persist directory; `create` puts it back.
+`proxy/letsencrypt/acme.json` in the persist directory (`create` puts it back)
+and the Docker volume `<lab>_dind-data` with the homes of the lab users (a new
+lab instance of the same name finds it again; `docker volume rm` removes it).
+
+lab (JupyterHub, `ifdd-de/lab`) is optional: an installation gets it only when
+its description lists it under `services`. `compile` then sets its Keycloak
+client (`ifdd-lab`) and lets the proxy join its internal network `lab-net`;
+without lab both stay empty. Its user image needs about 3 GB, twice with
+Docker-in-Docker. Until lab has a release, a description that uses it, and
+`config check` for every description, needs a commit of lab under
+`templates.refs` (as in `config/demo/installation.yaml`).
 wf keeps its flows in Git. By default (`wf_git: local`) ifdd-meta runs a small
 Gitea for that behind the proxy under the host `git`; `up` starts it before wf
 and creates the user, the repository and the token for wf. With
@@ -168,7 +178,8 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml demo load
 ```
 
 Creates the user `ifdd-demo` (groups: readers, writers, privileged, the wf
-group with wf, and the context root; with ts the realm role of a Grafana viewer),
+group with wf, the lab users with lab, and the context root; with ts the realm
+role of a Grafana viewer),
 or sets its password and adds missing groups and roles, and loads the fake energy grid and its time series with the ct pipelines
 `generate-energy-grid` and `generate-time-series` (fixed seed: a second run adds
 nothing). The password is `IFDD_META_DEMO_PASSWORD` from the environment or the
@@ -189,12 +200,14 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml test [-k EXPR] [-x] [-v] [--j
 
 `test` runs the integration tests of the package against the running
 installation (pytest): Keycloak, be, ts-api, schema/type/unit, the proxy
-headers, Grafana, and with test data the ct pipelines and the Git round trip of
-wf. Tests that write run only with the setting `tests: write`
+headers, Grafana, and with test data the ct pipelines, the Git round trip of
+wf and lab (login and groups of the hub; in a user server the notebook helper
+reads with the rights of the person logged in, a user without the context
+pattern gets 403; the services are reachable, the internet is not). Tests that write run only with the setting `tests: write`
 (`IFDD_META_TESTS=write`); the default `read` leaves the data alone. Tests of a
 service that is not installed are skipped.
 
-The browser tests (logins into ui, Grafana and wf through Keycloak, and the
+The browser tests (logins into ui, Grafana, wf and lab through Keycloak, and the
 demo user after `demo load`) need the extra `browser` and Chromium. On Linux
 they trust the local CA through their own NSS database, which needs `certutil`
 (Debian/Ubuntu: `libnss3-tools`). On macOS Chromium uses the System keychain:

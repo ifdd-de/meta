@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from .settings import SERVICES, TLS_MODES, WF_GIT_MODES
+from .settings import DEFAULT_SERVICES, SERVICES, TLS_MODES, WF_GIT_MODES
 
 _LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 _REALM = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -98,7 +98,7 @@ def load(path: Path) -> Description:
     if not _is_domain(context_root) or context_root != context_root.lower():
         raise DescriptionError(f"{path}: context_root must be a lower-case dotted name")
 
-    services = data.get("services", list(SERVICES))
+    services = data.get("services", list(DEFAULT_SERVICES))
     if not isinstance(services, list) or not services:
         raise DescriptionError(f"{path}: services must be a list")
     unknown_services = [s for s in services if s not in SERVICES]
