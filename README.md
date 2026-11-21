@@ -161,9 +161,10 @@ lab (JupyterHub, `ifdd-de/lab`) is optional: an installation gets it only when
 its description lists it under `services`. `compile` then sets its Keycloak
 client (`ifdd-lab`) and lets the proxy join its internal network `lab-net`;
 without lab both stay empty. Its user image needs about 3 GB, twice with
-Docker-in-Docker. Until lab has a release, a description that uses it, and
-`config check` for every description, needs a commit of lab under
-`templates.refs` (as in `config/demo/installation.yaml`).
+Docker-in-Docker. lab has no release 26.11.2: a description whose
+`templates.ref` is v26.11.2 needs a reference of lab under `templates.refs`
+(as in `config/demo/installation.yaml`), also without lab, because
+`config check` reads every template.
 
 wf keeps its flows in Git. By default (`wf_git: local`) ifdd-meta runs a small
 Gitea for that behind the proxy under the host `git`; `up` starts it before wf

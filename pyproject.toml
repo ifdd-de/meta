@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ifdd-meta"
 # Set with the first release; the scheme is YY.MM.N.
-version = "0.0.0"
+version = "26.11.3"
 description = "Build, run and test a complete IFDD installation from the ifdd-de templates"
 readme = "README.md"
 requires-python = ">=3.11"
