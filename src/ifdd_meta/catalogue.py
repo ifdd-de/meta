@@ -26,6 +26,7 @@ HOST_LABELS = {
     "unit": "unit",
     "ts": "ts",
     "wf": "wf",
+    "lab": "lab",
 }
 #: Host label of the Traefik dashboard; it gets no network alias and no DNS record.
 DASHBOARD_LABEL = "proxy"
@@ -37,6 +38,9 @@ GIT_REPOSITORY = "flows"
 
 #: Endings of variable names that would hold a secret; none may be a template variable.
 SECRET_ENDINGS = ("_secret", "_password", "_token")
+
+#: Keycloak client of the lab hub, set by compile when lab is among the services.
+LAB_CLIENT_ID = "ifdd-lab"
 
 #: Paths that ``cruft update`` must not touch, as the template READMEs and docs recommend.
 SKIPS = {
@@ -51,11 +55,12 @@ SKIPS = {
     "ts": (".env", "secrets", "grafana/dashboards/private"),
     "ts-api": (".env", "certs"),
     "wf": (".env", "secrets", "certs"),
+    "lab": (".env", "secrets", "certs", "hub/config.d"),
     "model": (".env", "src/linkml", "tests/reference"),
 }
 
 #: Services that call others through the proxy and need its local CA in certs/.
-CA_USERS = ("be", "ct", "ts", "ts-api", "wf")
+CA_USERS = ("be", "ct", "ts", "ts-api", "wf", "lab")
 
 #: Optional wheels of unreleased builds: package -> (service, file pattern).
 WHEELS = {
@@ -66,7 +71,8 @@ WHEELS = {
 
 #: Client secrets from keycloak/.env to the instances that use them:
 #: (service, variable in keycloak/.env, kind, path in the instance, variable there).
-#: kind "file": whole secret file; "env": line of a .env file; "kestra": SECRET_<name>, base64.
+#: kind "file": whole secret file, if the template has it; "new-file": whole secret file,
+#: created (0600) if missing; "env": line of a .env file; "kestra": SECRET_<name>, base64.
 SECRET_COPIES = (
     (
         "proxy",
@@ -84,10 +90,15 @@ SECRET_COPIES = (
         "secrets/kestra.env",
         "IFDD_API_CLIENT_SECRET",
     ),
+    # The template has no such file (its README creates it with mode 0600).
+    ("lab", "IFDD_KEYCLOAK_LAB_CLIENT_SECRET", "new-file", "secrets/oidc_client_secret", ""),
 )
 
 #: Files that survive "down --purge" (relative to the instance), e.g. the ACME state.
 PERSIST = {"proxy": ("letsencrypt/acme.json",)}
+#: Docker volumes (Compose names) that survive "down --purge"; the next instance of
+#: the same name finds them again. lab: the Docker-in-Docker daemon with the homes.
+PERSIST_VOLUMES = {"lab": ("dind-data",)}
 
 #: Hooks of these templates refuse to run as root.
 NO_ROOT = ("keycloak", "ts")
@@ -99,8 +110,10 @@ __all__ = [
     "GIT_REPOSITORY",
     "GIT_USER",
     "HOST_LABELS",
+    "LAB_CLIENT_ID",
     "NO_ROOT",
     "PERSIST",
+    "PERSIST_VOLUMES",
     "SECRET_COPIES",
     "SECRET_ENDINGS",
     "SERVICES",

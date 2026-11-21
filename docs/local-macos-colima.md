@@ -13,7 +13,7 @@ printed by `ifdd-meta local-setup`; you run them yourself.
 | What | Checked with | Note |
 |---|---|---|
 | macOS on Apple silicon (arm64) | `uname -m` | |
-| Colima with the Docker runtime | `colima list` | at least 4 CPUs, 12 GiB memory, 60 GiB disk |
+| Colima with the Docker runtime | `colima list` | at least 4 CPUs, 12 GiB memory, 60 GiB disk; with lab (optional) about 10 GiB more disk and 2 GiB memory per running user server |
 | Colima shares the run directory, writable | `grep -A6 '^mounts:' ~/.colima/<profile>/colima.yaml` | see below; `ifdd-meta up` checks it |
 | Docker CLI, Compose and buildx | `docker compose version`, `docker buildx version` | the Dockerfiles of ui and ct use BuildKit |
 | Git with name and e-mail | `git config user.name`, `git config user.email` | every instance becomes a Git repository |

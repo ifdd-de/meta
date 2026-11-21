@@ -75,9 +75,9 @@ templates:
   source: https://github.com/ifdd-de   # URL base or directory of local clones
   ref: v26.11.2                         # tag, branch or commit for all templates
   refs: {}                              # exceptions, e.g. {be: main}
-services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]  # run in catalogue order
+services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]  # catalogue order; lab only if listed
 workdir: work/example               # instances are created here
-persist: state/example              # survives "down --purge" (ACME state, backups)
+persist: state/example              # survives "down --purge" (ACME state, backups; lab: a volume)
 wheels: {}                          # optional unreleased builds, e.g. {be-core: ../be-core/dist}
 wait_timeout: 300                   # seconds per service start
 ```
@@ -102,6 +102,7 @@ What the tool knows about each template is data in the package, not configuratio
 | ts | `.env`, `secrets`, `grafana/dashboards/private` | yes (`certs/`) | compose + `adm_01_plugins.sh` | `adm_02_run.sh` |
 | ts-api | `.env`, `certs` | yes | compose | compose |
 | wf | `.env`, `secrets`, `certs` | yes | `adm_01_build.sh` | `adm_02_run.sh` |
+| lab (optional) | `.env`, `secrets`, `certs`, `hub/config.d` | yes | `adm_01_build.sh` | `adm_02_run.sh` (production only) |
 | model | `.env`, `src/linkml`, `tests/reference` | – | – | – (`just test`; `just publish` later) |
 
 The skip paths are those the template READMEs recommend (handover B.5); the
@@ -110,11 +111,14 @@ catalogue closes the gaps of the old meta repository (wf, ts).
 **Start order:** networks → proxy (Traefik only) → keycloak, be, ui, schema, type,
 unit → proxy (all services, oauth2-proxy needs the realm) → Git server for wf
 (`wf_git: local`; user, repository and token are created here) → wf → ts →
-ts-api.
+ts-api → lab (its hub needs Keycloak and be). The networks are `proxy-net`, the
+ingest network of ts and, with lab, `lab-net` (internal); the proxy joins
+`lab-net` with its aliases (`ifdd_proxy_extra_networks`).
 
 **Secret distribution** (from `keycloak/.env` to the users, values never printed):
 ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct client →
-`ct/.env`, API client → `wf/secrets/kestra.env`; one entry per further realm of
+`ct/.env`, API client → `wf/secrets/kestra.env`, lab client →
+`lab/secrets/oidc_client_secret` (created, 0600); one entry per further realm of
 `ifdd_keycloak_extra_realms`.
 
 ## 6. Commands
@@ -124,12 +128,12 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `config check` | files found and parsed; every key of the variables file defined by at least one template at the chosen ref; every template variable present (except versions), a missing one is an error; no secret-like names; settings valid | nothing |
 | `compile` | writes the variables file and the other files from a description (section 10); `--check` only compares | generated files |
 | `config show` | effective settings with the source of each value | nothing |
-| `create` | `cruft create` per service with skips and ref; wheels; local CA (`tls: local-ca`: `proxy/adm_01_certs.sh`, `ca.crt` into `certs/` of be, ct, ts, ts-api, wf); client secrets from `keycloak/.env`; instance directories recorded in `<workdir>/.ifdd-meta/instances.json`; every instance a local Git repository with one commit and no remote (identity from the Git configuration only; stops if a secret-like file would be committed); refuses existing instances and, for keycloak and ts, root | work directory |
+| `create` | `cruft create` per service with skips and ref; wheels; local CA (`tls: local-ca`: `proxy/adm_01_certs.sh`, `ca.crt` into `certs/` of be, ct, ts, ts-api, wf, lab); client secrets from `keycloak/.env`; instance directories recorded in `<workdir>/.ifdd-meta/instances.json`; every instance a local Git repository with one commit and no remote (identity from the Git configuration only; stops if a secret-like file would be committed); refuses existing instances and, for keycloak and ts, root | work directory |
 | `update` | per instance behind its reference `cruft update` with the values of the variables file and the changed defaults the template owns, refreshed private variables and the skip list of `create`; new `*.dist` defaults into `.env` where the old default is still set; stop at the first conflict; one commit per instance; `--check` shows what would change | instances |
 | `local-setup` | prints the `sudo` commands for the `/etc/hosts` block of `hosts.txt` and for trusting the local CA (macOS: System keychain; Debian/Ubuntu: `update-ca-certificates`); `--remove` prints the commands that undo them; runs nothing | nothing |
 | `update` | `cruft update` per instance, `--set` passed as `--variables-to-update`; lists `.rej` files and fails on them | instances |
 | `build` | images of all or selected services | images |
-| `up` / `down` | first a check that the Docker daemon sees the work directory (a container of the Traefik image looks for the state file), then start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths | containers |
+| `up` / `down` | first a check that the Docker daemon sees the work directory (a container of the Traefik image looks for the state file), then start in order / stop; `down --purge` also deletes volumes and the work directory, except the persist paths and the persist volumes (lab: `dind-data` with the homes) | containers |
 | `status`, `logs` | state of all services; logs into a directory (CI artefacts) | nothing / log files |
 | `keycloak add-client` | a service client (client credentials) with client roles, scope mappings and default scopes; `--create-roles` for a new context pattern; the secret goes into a new file (0600) and is never shown | realm |
 | `keycloak add-user` | a user with a generated password (new file, 0600), groups, realm roles and client roles; `--temporary` asks for a new password at the first login. Context patterns: `--role ifdd:<pattern> --create-roles`, so there is no `add-context-role` | realm |

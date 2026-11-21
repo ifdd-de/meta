@@ -12,8 +12,13 @@ context_root: ifdd.de
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 templates:
   ref: v26.11.2
-  # Templates without a release 26.11.2 stay at their last one.
+  # Templates without a release 26.11.2 stay at their last one. keycloak, proxy
+  # and lab (not part of the demo, but checked by "config check" and used by
+  # the integration run) at their commits with lab, until they are released.
   refs:
+    keycloak: ea2c59b21d1c08867517675f22c4588ca88e5f4a
+    proxy: 1315c0f76ed3d248d417838289ca6418ae769849
+    lab: 6a0cf729321ae71cd4a16ca3e169df08f7ea7f83
     schema: v26.11.1
     type: v26.11.1
     unit: v26.11.1

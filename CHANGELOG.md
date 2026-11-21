@@ -5,6 +5,20 @@ release follows the first successful integration run.
 
 ## [Unreleased]
 
+- lab (JupyterHub, `ifdd-de/lab`) as an optional service: only when the
+  description lists it. `compile` derives its host, the Keycloak client
+  `ifdd-lab` and `ifdd_proxy_extra_networks` (its internal network `lab-net`),
+  all empty without lab; overrides are now visible to the derived values.
+  `create` copies the client secret into `lab/secrets/oidc_client_secret`
+  (new, 0600) and the local CA into `lab/certs/`; `up` creates `lab-net` as an
+  internal network and starts lab last; `down --purge` keeps the volume
+  `dind-data` (the homes of the users). `demo load` puts `ifdd-demo` into the
+  lab users group. Integration tests: login and groups of the hub, the notebook
+  helper reads with the user's rights (403 without the context pattern), the
+  services are reachable from a user server, the internet is not.
+- `config/demo`: keycloak, proxy and lab at the commits with lab until their
+  release; every description needs a reference of lab for `config check`
+  until lab has a tag at its `templates.ref`.
 - CI: GitHub Actions pinned to commit SHAs (version as comment),
   `persist-credentials: false` on every checkout.
 - `ifdd-meta update [--check] [--only …]`: later template changes into the

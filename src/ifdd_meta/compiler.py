@@ -16,7 +16,14 @@ import jinja2
 import yaml
 
 from . import yamltext
-from .catalogue import DASHBOARD_LABEL, GIT_LABEL, GIT_REPOSITORY, GIT_USER, HOST_LABELS
+from .catalogue import (
+    DASHBOARD_LABEL,
+    GIT_LABEL,
+    GIT_REPOSITORY,
+    GIT_USER,
+    HOST_LABELS,
+    LAB_CLIENT_ID,
+)
 from .description import Description
 
 VARIABLES_FILE = "cookiecutter_all.yaml"
@@ -54,7 +61,8 @@ def compile_description(description: Description, defaults: str | None = None) -
     document = yamltext.parse(text)
     values: dict[str, str | list[str]] = yaml.safe_load(text)["default_context"]
 
-    derived = derive(description, values)
+    # Derived values see the overrides (e.g. a renamed lab network); overrides still win.
+    derived = derive(description, {**values, **description.overrides})
     values.update(derived)
     unknown = sorted(set(description.overrides) - set(values))
     if unknown:
@@ -125,6 +133,7 @@ def derive(description: Description, values: dict) -> dict[str, str]:
         "ifdd_ts_api_url": f"{url['ts']}{values['ifdd_ts_api_path']}",
         "ifdd_ts_be_url": url["rest"],
         "ifdd_wf_host": host("wf"),
+        "ifdd_lab_host": host("lab"),
         # realm
         "ifdd_keycloak_realm": d.realm,
         "ifdd_keycloak_extra_realms": ", ".join(d.extra_realms),
@@ -148,6 +157,11 @@ def derive(description: Description, values: dict) -> dict[str, str]:
         # Empty without wf: no host behind the gate (keycloak 26.11.2 or later).
         "ifdd_keycloak_proxy_gate_hosts": host("wf") if "wf" in description.services else "",
         "ifdd_proxy_oauth2_proxy_service": f"{proxy_slug}-oauth2-proxy",
+        # lab: its client in the realm and its internal network, which the proxy
+        # joins; empty without lab (no client, no network; keycloak and proxy
+        # from their lab release on)
+        "ifdd_keycloak_lab_client_id": LAB_CLIENT_ID if "lab" in services else "",
+        "ifdd_proxy_extra_networks": values["ifdd_lab_network"] if "lab" in services else "",
         "ifdd_wf_sso_group": values["ifdd_keycloak_wf_admin_group"],
         **_wf_git(d),
         # content security policies: the realm, and for the UI also be, type, unit

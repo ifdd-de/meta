@@ -270,6 +270,9 @@ def _secrets(settings: Settings, state, run: Run) -> None:
         value = copysecret.read_env(source, variable)
         if kind == "file":
             changed = copysecret.write_file(target, value)
+        elif kind == "new-file":
+            # As the template's README asks (install -m 600); its readers run as root.
+            changed = copysecret.write_file(target, value, new_mode=0o600)
         else:
             changed = copysecret.write_env(target, name, value, kestra=kind == "kestra")
         what = f"{variable} -> {service}/{path}" + (f" ({name})" if name else "")
