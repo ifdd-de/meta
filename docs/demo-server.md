@@ -46,17 +46,20 @@ Then, as `ifdd`:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 git config --global user.name "IFDD demo"
 git config --global user.email "maintainers@ifdd.de"
 git clone https://github.com/ifdd-de/meta "$HOME/meta"
 mkdir -p "$HOME/demo/work" "$HOME/demo/state" "$HOME/bin"
-umask 077
-cat > "$HOME/ifdd-demo.env" <<EOF
-IFDD_META_WORKDIR=$HOME/demo/work
-IFDD_META_PERSIST=$HOME/demo/state
-IFDD_META_DEMO_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
-EOF
+touch "$HOME/ifdd-demo.env" && chmod 600 "$HOME/ifdd-demo.env"
+printf 'IFDD_META_WORKDIR=%s\nIFDD_META_PERSIST=%s\nIFDD_META_DEMO_PASSWORD=%s\n' \
+    "$HOME/demo/work" "$HOME/demo/state" \
+    "$(head -c 24 /dev/urandom | base64 | tr -d '/+=')" > "$HOME/ifdd-demo.env"
 ```
+
+The installer of uv puts `uv` into `~/.local/bin`, which the current shell
+does not have in its `PATH` yet; the `export` covers this shell, the script
+below sets it itself (also for cron).
 
 `ifdd-demo.env` is the only private file: the paths and the password of
 `ifdd-demo`. The description and the settings come unchanged from
@@ -68,6 +71,7 @@ The script of the weekly run, `$HOME/bin/ifdd-demo-rebuild`:
 #!/bin/sh
 # Rebuilds the IFDD demo from the newest release of ifdd-de/meta.
 set -eu
+PATH="$HOME/.local/bin:$PATH"
 cd "$HOME/meta"
 git fetch --quiet --tags origin
 tag=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
