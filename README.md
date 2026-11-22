@@ -11,9 +11,10 @@ operator. The design, with everything planned, is in
 
 **Status:** in development. Available so far: `compile`, `config show`, `config check`,
 `create`, `update`, `local-setup`, `build`, `up`, `down`, `status`, `logs`, `demo load`, `test`,
-`keycloak add-client`, `keycloak add-user`.
+`rebuild`, `keycloak add-client`, `keycloak add-user`.
 
 A test installation on a Mac (Colima): [`docs/local-macos-colima.md`](docs/local-macos-colima.md).
+The public demo server: [`docs/demo-server.md`](docs/demo-server.md).
 
 ## Requirements
 
@@ -191,8 +192,23 @@ nothing). The password is `IFDD_META_DEMO_PASSWORD` from the environment or the
 The workflow `integration.yml` runs `create`, `build` and `up` on a fresh GitHub
 runner with the real images and checks that every service answers through the
 proxy, runs `local-setup` (its printed commands), `demo load` twice, then
-`ifdd-meta test` with `tests: write`; the JUnit report, logs,
+`ifdd-meta test` with `tests: write`, and at the end `rebuild` as the demo
+server runs it; the JUnit report, logs,
 image digests and the use of disk and memory are kept as artefacts.
+
+## Rebuild
+
+```bash
+uv run ifdd-meta --settings path/to/ifdd-meta.yaml rebuild [--demo] [--test] [--prune]
+```
+
+Tears the installation down (`down --purge`, the persist paths stay) and runs
+`create`, `build` and `up` again; `--demo` then loads the demo data, `--test`
+runs the integration tests. `--prune` deletes the Docker build cache after
+`build` and every image no container uses after `up`: only on a host that runs
+nothing else. Each run writes `rebuild-status.txt` (start, end, result, the
+failed step) into the persist directory; exit 1 if a step fails. The public
+demo runs it once a week ([`docs/demo-server.md`](docs/demo-server.md)).
 
 ## Test
 
