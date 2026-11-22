@@ -2,7 +2,7 @@
 
 The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
-## [Unreleased]
+## [26.11.4] - 2026-11-22
 
 - `ifdd-meta rebuild [--demo] [--test] [--prune]`: `down --purge` (the persist
   paths stay), `create`, `build`, `up`, then optionally `demo load` and the
