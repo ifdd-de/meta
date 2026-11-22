@@ -1,9 +1,10 @@
 # Changelog
 
-The version scheme follows the other IFDD repositories: `YY.MM.N`. The first
-release follows the first successful integration run.
+The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
-## [Unreleased]
+## [26.11.3] - 2026-11-21
+
+First release, in the release round of keycloak, proxy and lab 26.11.3.
 
 - lab (JupyterHub, `ifdd-de/lab`) as an optional service: only when the
   description lists it. `compile` derives its host, the Keycloak client
@@ -16,9 +17,9 @@ release follows the first successful integration run.
   lab users group. Integration tests: login and groups of the hub, the notebook
   helper reads with the user's rights (403 without the context pattern), the
   services are reachable from a user server, the internet is not.
-- `config/demo`: keycloak, proxy and lab at the commits with lab until their
-  release; every description needs a reference of lab for `config check`
-  until lab has a tag at its `templates.ref`.
+- `config/demo`: keycloak, proxy and lab at v26.11.3; a description whose
+  `templates.ref` has no tag of lab needs a reference of lab under
+  `templates.refs` for `config check`, also without lab.
 - CI: GitHub Actions pinned to commit SHAs (version as comment),
   `persist-credentials: false` on every checkout.
 - `ifdd-meta update [--check] [--only …]`: later template changes into the

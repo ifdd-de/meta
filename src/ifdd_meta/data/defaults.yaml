@@ -20,9 +20,8 @@
 #   listed under the service that owns the value.
 # - "derived" marks values that compile computes; the value here is the one
 #   for short host names (id, rest, ui, …) and a local CA.
-# - Checked against the templates at v26.11.2 (be, ui, ts-api, wf), v26.11.1
-#   (schema, type, unit, ct, ts, model) and the commits of keycloak, proxy and
-#   lab in config/demo/installation.yaml (lab has no release yet).
+# - Checked against the templates at v26.11.3 (keycloak, proxy, lab), v26.11.2
+#   (be, ui, ts-api, wf) and v26.11.1 (schema, type, unit, ct, ts, model).
 
 default_context:
 
