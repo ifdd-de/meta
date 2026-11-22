@@ -6,8 +6,8 @@ The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
 - `ifdd-meta rebuild [--demo] [--test] [--prune]`: `down --purge` (the persist
   paths stay), `create`, `build`, `up`, then optionally `demo load` and the
-  integration tests; `--prune` deletes the Docker build cache and the images no
-  container uses. Writes `rebuild-status.txt` into the persist directory; the
+  integration tests; `--prune` deletes every image and the build cache after
+  `down` and the build cache after `build`. Writes `rebuild-status.txt` into the persist directory; the
   first failing step stops the run with exit code 1. The integration run ends
   with it, with the options of the demo server.
 - `docs/demo-server.md`: the public demo on its own server, rebuilt once a week

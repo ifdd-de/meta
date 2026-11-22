@@ -347,8 +347,8 @@ def rebuild_command(
         bool,
         typer.Option(
             "--prune",
-            help="Delete the Docker build cache and every image no container uses; "
-            "only on a host that runs nothing else.",
+            help="Delete every image and the build cache after down, and the build cache "
+            "after build; only on a host that runs nothing else.",
         ),
     ] = False,
     verbose: VerboseOption = False,

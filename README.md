@@ -204,10 +204,13 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml rebuild [--demo] [--test] [--
 
 Tears the installation down (`down --purge`, the persist paths stay) and runs
 `create`, `build` and `up` again; `--demo` then loads the demo data, `--test`
-runs the integration tests. `--prune` deletes the Docker build cache after
-`build` and every image no container uses after `up`: only on a host that runs
-nothing else. Each run writes `rebuild-status.txt` (start, end, result, the
-failed step) into the persist directory; exit 1 if a step fails. The public
+runs the integration tests. `--prune` deletes every image and the build cache
+after `down`, while nothing runs, and the build cache again after `build`:
+only on a host that runs nothing else. (Images of ct, of the task runner of wf
+and of the lab user servers have no container most of the time, so deleting
+"unused" images after `up` would remove them.) Each run writes
+`rebuild-status.txt` (start, end, result, the failed step) into the persist
+directory; exit 1 if a step fails. The public
 demo runs it once a week ([`docs/demo-server.md`](docs/demo-server.md)).
 
 ## Test

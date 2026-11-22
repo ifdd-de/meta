@@ -16,7 +16,8 @@ password that only the operator knows.
 - Linux on x86_64 with at least 16 GB of memory and 50 GB of disk. The
   integration run of this repository (all services with lab) ends with about
   25 GB of images, 16 GB of build cache and 3 GB of volumes; `--prune`
-  removes the cache and the unused images after each run.
+  deletes every image and the cache before each build and the cache after it,
+  so each week pulls and builds everything again.
 - Docker Engine with the Compose plugin. The integration run uses Docker 29.4
   and Compose v5.1 (GitHub runner, 2026-11-22). Older versions, such as the
   packages of a distribution, are not tested; Docker's own repository

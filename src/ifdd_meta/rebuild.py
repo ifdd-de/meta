@@ -8,9 +8,12 @@ as the public demo (a cron job calls it once a week). One run:
 2. ``create``, ``build``, ``up``;
 3. optionally ``demo load`` (``--demo``) and the integration tests
    (``--test``, with the setting ``tests``);
-4. optionally ``--prune``: the Docker build cache after ``build`` and every
-   image that no container uses after ``up``. Only on a host that runs
-   nothing else.
+4. optionally ``--prune``: every image and the build cache right after
+   ``down``, while nothing runs, and the build cache again after ``build``.
+   What stays is what the new installation uses. Only on a host that runs
+   nothing else. Deleting unused images after ``up`` would be wrong: images
+   such as those of ct, the task runner of wf or the user servers of lab run
+   only on demand and have no container most of the time.
 
 Every run writes ``rebuild-status.txt`` into the persist directory: start,
 end, result and, after a failure, the step and the log. ``down --purge``
@@ -50,29 +53,31 @@ def _prune_build_cache(settings: Settings, run: Run) -> None:
 
 
 def _prune_images(settings: Settings, run: Run) -> None:
-    run.overview("Deleting every image that no container uses")
+    run.overview("Deleting every image and the build cache (nothing runs now)")
     run.command(["docker", "image", "prune", "--all", "--force"], cwd=settings["workdir"])
+    run.command(["docker", "builder", "prune", "--all", "--force"], cwd=settings["workdir"])
 
 
 DEFAULT_STEPS: Mapping[str, Step] = {
     "down": _down,
+    "prune-images": _prune_images,
     "create": lambda settings, run: create.create(settings, run),
     "build": lambda settings, run: services.build(settings, run),
     "prune-build-cache": _prune_build_cache,
     "up": lambda settings, run: services.up(settings, run),
-    "prune-images": _prune_images,
     "demo": demo.load,
 }
 
 
 def plan(prune: bool = False, demo_data: bool = False, test: bool = False) -> list[str]:
     """The names of the steps in their order."""
-    names = ["down", "create", "build"]
+    names = ["down"]
+    if prune:
+        names.append("prune-images")
+    names += ["create", "build"]
     if prune:
         names.append("prune-build-cache")
     names.append("up")
-    if prune:
-        names.append("prune-images")
     if demo_data:
         names.append("demo")
     if test:

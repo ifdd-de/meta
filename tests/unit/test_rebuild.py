@@ -43,7 +43,7 @@ def test_plan_without_options():
 
 def test_plan_of_the_demo_server():
     assert rebuild.plan(prune=True, demo_data=True, test=True) == [
-        "down", "create", "build", "prune-build-cache", "up", "prune-images", "demo", "test",
+        "down", "prune-images", "create", "build", "prune-build-cache", "up", "demo", "test",
     ]  # fmt: skip
 
 
