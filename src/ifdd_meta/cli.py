@@ -18,6 +18,7 @@ from . import (
     demo,
     keycloak,
     localsetup,
+    rebuild,
     services,
     testrun,
     update,
@@ -331,6 +332,48 @@ def test_command(
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from None
     raise typer.Exit(code)
+
+
+@app.command("rebuild")
+def rebuild_command(
+    ctx: typer.Context,
+    demo_data: Annotated[
+        bool, typer.Option("--demo", help="Then load the demo user and the demo data.")
+    ] = False,
+    test: Annotated[
+        bool, typer.Option("--test", help="Then run the integration tests (setting tests).")
+    ] = False,
+    prune: Annotated[
+        bool,
+        typer.Option(
+            "--prune",
+            help="Delete every image and the build cache after down, and the build cache "
+            "after build; only on a host that runs nothing else.",
+        ),
+    ] = False,
+    verbose: VerboseOption = False,
+) -> None:
+    """Tear the installation down (keeps the persist paths) and create, build and start it again.
+
+    Writes rebuild-status.txt into the persist directory; exit 1 if a step fails.
+    """
+    settings = _settings(ctx)
+    run = Run(settings["workdir"] / "logs", "rebuild", typer.echo, verbose)
+    names = rebuild.plan(prune=prune, demo_data=demo_data, test=test)
+
+    def tests() -> int:
+        return testrun.run(settings, ctx.obj["cli"], verbose=verbose)
+
+    try:
+        rebuild.rebuild(settings, run, names, tests=tests)
+    except (
+        create.CreateError, StepError, SecretError, keycloak.KeycloakError, OSError, ValueError
+    ) as error:  # fmt: skip
+        typer.echo(f"error: {error}", err=True)
+        typer.echo(f"log: {run.log}", err=True)
+        typer.echo(f"status: {rebuild.status_path(settings)}", err=True)
+        raise typer.Exit(1) from None
+    run.overview(f"rebuild: done; status: {rebuild.status_path(settings)}; log: {run.log}")
 
 
 def _roles(values: list[str] | None) -> dict[str, list[str]]:

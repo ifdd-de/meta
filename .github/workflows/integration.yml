@@ -157,6 +157,16 @@ jobs:
           ifdd-meta --settings "$SETTINGS" test -v --junit ci-run/artefacts/junit.xml
           --screenshots ci-run/artefacts/screenshots
 
+      - name: Rebuild (the weekly run of the demo server)
+        run: |
+          # Tears everything down and builds it again from the same references,
+          # then demo data and the read-only tests, with the same options as the
+          # cron job. /etc/hosts still names the hosts; the tests trust the new
+          # local CA through its file.
+          ifdd-meta --settings "$SETTINGS" rebuild --prune --demo --test
+          cat ci-run/state/rebuild-status.txt
+          grep -qx 'result: ok' ci-run/state/rebuild-status.txt
+
       - name: Runner after the run
         if: always()
         run: |

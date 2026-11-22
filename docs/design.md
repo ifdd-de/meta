@@ -9,7 +9,7 @@ the GitHub organisation `ifdd-de`. The same tool serves three places:
 | Place | What it does there |
 |---|---|
 | CI of this repository | integration run on a fresh runner: create, build, start, load demo data, test, collect logs, tear down |
-| a demo server | rebuilds the public demo from a fixed release at regular intervals |
+| a demo server | rebuilds the public demo from the newest release of this repository once a week (`rebuild`, [`demo-server.md`](demo-server.md)) |
 | an operator's own servers | creates and updates the instances of one server, with a private configuration |
 
 ## 1. Scope
@@ -139,6 +139,7 @@ ts client → `time-series/secrets/`, proxy client → `proxy/secrets/`, ct clie
 | `keycloak add-user` | a user with a generated password (new file, 0600), groups, realm roles and client roles; `--temporary` asks for a new password at the first login. Context patterns: `--role ifdd:<pattern> --create-roles`, so there is no `add-context-role` | realm |
 | `demo load` | demo user `ifdd-demo` (readers, writers, privileged, wf group, context root, with ts the realm role `ifdd_ts_role_viewer`; created, or password set and missing groups and roles added) with the password `IFDD_META_DEMO_PASSWORD` (a new one goes into `.env`, 0600), then the ct pipelines `generate-energy-grid` and `generate-time-series` | data |
 | `test` | integration tests against the running installation (section 8); data only with the setting `tests: write` | test data |
+| `rebuild` | `down --purge` (if there are instances), `create`, `build`, `up`; `--demo` then `demo load`, `--test` then `test`; `--prune` deletes every image and the build cache after `down` and the build cache after `build` (not unused images after `up`: ct, the wf task runner and lab user images have no container most of the time); writes `rebuild-status.txt` into the persist directory; the first failing step stops it | everything except the persist paths |
 | `docs render` | the instance chapter (former `.adm_docs`) with the same variables | output directory |
 
 Every command takes `--only SERVICE[,…]`. Commands are idempotent where the

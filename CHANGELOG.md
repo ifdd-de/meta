@@ -2,6 +2,17 @@
 
 The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
+## [Unreleased]
+
+- `ifdd-meta rebuild [--demo] [--test] [--prune]`: `down --purge` (the persist
+  paths stay), `create`, `build`, `up`, then optionally `demo load` and the
+  integration tests; `--prune` deletes every image and the build cache after
+  `down` and the build cache after `build`. Writes `rebuild-status.txt` into the persist directory; the
+  first failing step stops the run with exit code 1. The integration run ends
+  with it, with the options of the demo server.
+- `docs/demo-server.md`: the public demo on its own server, rebuilt once a week
+  by cron from the newest release of this repository.
+
 ## [26.11.3] - 2026-11-21
 
 First release, in the release round of keycloak, proxy and lab 26.11.3.
