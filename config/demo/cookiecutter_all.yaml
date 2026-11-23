@@ -9,7 +9,7 @@ default_context:
 
   # Registry prefix of the own images (shared: be, ct, ui); template default ghcr.io/ifdd-de
   ifdd_registry_url: "ifdd"
-  # nginx image of the static content services (shared: schema, type, unit)
+  # nginx image of the static content services (shared: model, schema, type, unit)
   ifdd_nginx_image: "nginxinc/nginx-unprivileged:1.30.6-alpine-slim"
 
   # ===========================================================================
@@ -32,7 +32,7 @@ default_context:
     ui.demo.grid.example.ifdd.de, schema.demo.grid.example.ifdd.de,
     type.demo.grid.example.ifdd.de, unit.demo.grid.example.ifdd.de,
     ts.demo.grid.example.ifdd.de, wf.demo.grid.example.ifdd.de,
-    git.demo.grid.example.ifdd.de
+    model.demo.grid.example.ifdd.de, git.demo.grid.example.ifdd.de
   # Host of the Traefik dashboard (/dashboard/) (derived)
   ifdd_proxy_host: "proxy.demo.grid.example.ifdd.de"
   # User of the Traefik dashboard; its password is generated into proxy/.env
@@ -553,13 +553,28 @@ default_context:
   ifdd_wf_git_namespaces: "ifdd"
 
   # ===========================================================================
-  # 10. Model (LinkML sources)
+  # 10. Model (LinkML sources; nginx)
   # ===========================================================================
 
   # Display name of the model instance; its slug must differ from the package name ifdd_model
   ifdd_model_prj_name: "Model"
-  # Directory name of the instance, derived from the name
+  # Directory and router name of the instance, derived from the name
   ifdd_model_prj_slug: "{{ cookiecutter.ifdd_model_prj_name|lower|replace(' ', '_') }}"
+  # Host name under which Traefik routes model (derived)
+  ifdd_model_host: "model.demo.grid.example.ifdd.de"
+  # Port on 127.0.0.1 in development
+  ifdd_model_dev_port: "8084"
+  # Content directory: served below /v1/ and read by the builder (development:
+  # the examples in src/linkml; production: own content clone)
+  ifdd_model_content_dir: "./src/linkml"
+  # Show directory listings
+  ifdd_model_autoindex: "y"
+  # Access-Control-Allow-Origin: * or one origin
+  ifdd_model_cors_origin: "*"
+  # Cache-Control max-age in seconds (0 = no-cache)
+  ifdd_model_cache_max_age: "300"
+  # Memory limit of the container
+  ifdd_model_memory_limit: "128M"
 
   # ===========================================================================
   # 11. Lab (JupyterHub, one container per user; only with lab in the services)

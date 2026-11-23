@@ -28,9 +28,9 @@ jobs:
     timeout-minutes: 75
     env:
       SETTINGS: ci-run/ifdd-meta.yaml
-      # Every service that runs (ct and model have nothing to start); wf brings
-      # the local Git server for its flows.
-      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf,lab
+      # Every service that runs (ct has nothing to start); wf brings the local
+      # Git server for its flows.
+      START: proxy,keycloak,be,ui,schema,type,unit,ts,ts-api,wf,lab,model
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,6 +125,7 @@ jobs:
               https://schema.ci.test/v1/ \
               https://type.ci.test/v1/ \
               https://unit.ci.test/v1/ \
+              https://model.ci.test/v1/ \
               https://ts.ci.test/api/health \
               https://ts.ci.test/tsapi/version \
               https://git.ci.test/api/healthz \

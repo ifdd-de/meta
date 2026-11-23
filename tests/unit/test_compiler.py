@@ -43,6 +43,7 @@ def test_public_names_with_lets_encrypt(tmp_path):
     assert v["ifdd_be_url"] == v["ifdd_ts_be_url"] == "https://rest.a.example.org"
     assert v["ifdd_type_url"] == "https://type.a.example.org/v1"
     assert v["ifdd_ts_api_url"] == "https://ts.a.example.org/tsapi"
+    assert v["ifdd_model_host"] == "model.a.example.org"
     assert v["ifdd_proxy_enable_letsencrypt"] == "y"
     assert v["ifdd_proxy_letsencrypt_email"] == "ops@example.org"
     assert v["ifdd_proxy_oauth2_proxy_ca_file"] == ""
@@ -59,7 +60,7 @@ def test_public_names_with_lets_encrypt(tmp_path):
         "font-src 'self' data:; connect-src 'self' https://id.a.example.org "
         "https://rest.a.example.org https://type.a.example.org https://unit.a.example.org"
     )
-    labels = ["id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "git"]
+    labels = ["id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "model", "git"]
     names = [f"{label}.a.example.org" for label in labels]
     assert result.files["hosts.txt"].splitlines()[2:] == names  # no dashboard host
 
@@ -159,12 +160,13 @@ def test_local_git_server_for_wf(tmp_path):
     v = result.values
     assert v["ifdd_wf_git_url"] == "https://git.a.example.org/kestra/flows.git"
     assert v["ifdd_wf_git_username"] == "kestra"
-    assert v["ifdd_proxy_internal_hosts"].split(", ")[-2:] == [
+    assert v["ifdd_proxy_internal_hosts"].split(", ")[-3:] == [
         "wf.a.example.org",
+        "model.a.example.org",
         "git.a.example.org",
     ]
     line = result.files["hosts.txt"].splitlines()[-2]
-    assert line.endswith(" wf.a.example.org git.a.example.org")
+    assert line.endswith(" wf.a.example.org model.a.example.org git.a.example.org")
     generated = yaml.safe_load(result.files["ifdd-meta.yaml"])
     assert (generated["wf_git"], generated["git_host"]) == ("local", "git.a.example.org")
     assert "IFDD_META_WF_GIT_TOKEN" not in result.files[".env.example"]
@@ -203,7 +205,7 @@ def test_local_ca_with_a_suffix_gives_an_etc_hosts_block(tmp_path):
     assert names[0] == "127.0.0.1"
     assert names[1:] == [
         f"{label}.demo.test"
-        for label in ("id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "git")
+        for label in ("id", "rest", "ui", "schema", "type", "unit", "ts", "wf", "model", "git")
     ]
     assert "proxy.demo.test" not in names  # the dashboard has no host entry
 

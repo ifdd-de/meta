@@ -27,6 +27,7 @@ HOST_LABELS = {
     "ts": "ts",
     "wf": "wf",
     "lab": "lab",
+    "model": "model",
 }
 #: Services a service calls; compile stops unless each is local or external.
 DEPENDENCIES = {

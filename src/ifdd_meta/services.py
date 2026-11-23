@@ -21,8 +21,9 @@ from .create import STATE_DIR, STATE_FILE, CreateError, load_state, select
 from .runner import Run
 from .settings import Settings
 
-#: Services that only pull upstream images when built.
-PULL_ONLY = ("proxy", "keycloak", "schema", "type", "unit", "ts")
+#: Services that only pull upstream images when built (model: nginx; its builder
+#: `just build` is not run here).
+PULL_ONLY = ("proxy", "keycloak", "schema", "type", "unit", "ts", "model")
 
 #: Start order (D4: Keycloak before be and ui). The proxy starts twice: Traefik
 #: alone first, all its services (oauth2-proxy needs the realm) after the others.
@@ -34,6 +35,7 @@ START = (
     ("schema", "all"),
     ("type", "all"),
     ("unit", "all"),
+    ("model", "all"),
     ("proxy", "all"),
     ("git", "git"),
     ("wf", "script"),
@@ -73,8 +75,6 @@ def _compose_for(settings: Settings, service: str) -> list[str]:
 def build(settings: Settings, run: Run, only: Iterable[str] | None = None) -> None:
     environment = settings["environment"]
     for service, path in _instances(settings, only).items():
-        if service == "model":
-            continue
         if service == "git":
             run.overview("Pulling the image of the Git server for wf")
             run.command(["docker", "compose", "pull"], cwd=path)
@@ -147,7 +147,7 @@ def down(
     order = list(dict.fromkeys(service for service, _ in reversed(START)))
     order += [service for service in instances if service not in order]
     for service in order:
-        if service not in instances or service in ("ct", "model"):
+        if service not in instances or service == "ct":
             continue
         keep = PERSIST_VOLUMES.get(service, ()) if purge else ()
         run.overview(f"Stopping {service}" + (" and removing its volumes" if purge else ""))
@@ -176,7 +176,7 @@ def status(
     """(service, container, state, health) of every container."""
     rows = []
     for service, path in _instances(settings, only).items():
-        if service in ("ct", "model"):
+        if service == "ct":
             continue
         result = subprocess.run(
             [*_compose_for(settings, service), "ps", "--all", "--format", "json"],
@@ -205,7 +205,7 @@ def logs(settings: Settings, run: Run, directory: Path) -> list[Path]:
     directory.mkdir(parents=True, exist_ok=True)
     written = []
     for service, path in _instances(settings, None).items():
-        if service in ("ct", "model"):
+        if service == "ct":
             continue
         target = directory / f"{service}.log"
         with target.open("w", encoding="utf-8") as handle:

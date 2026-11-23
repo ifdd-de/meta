@@ -19,6 +19,18 @@ The version scheme follows the other IFDD repositories: `YY.MM.N`.
   secrets from that file when Keycloak is external.
 - CI: a second installation on the same runner uses Keycloak, schema, type and
   unit of the first one.
+- model is a web service (template 26.11.6): host label `model`, its own
+  variables in the defaults, `build` pulls the nginx image (`just build` is not
+  run), `up` starts it after unit, `down`, `status` and `logs` include it. The
+  demo uses model 26.11.6 and lists `model.<suffix>` in `hosts.txt`.
+- Upgrade: model needs template 26.11.6 or later (earlier versions have no
+  compose files, so `build` and `up` fail). `update` lists the three new
+  settings of `model/.env` (`IFDD_MODEL_HOST`, `IFDD_MODEL_CONTENT_DIR`,
+  `IFDD_MODEL_DEV_PORT`); add them by hand. An installation with a host suffix
+  needs a DNS record (or a hosts entry) for the new name; an installation
+  without a suffix gives model a host in its block.
+- Integration tests: model serves a LinkML source as `application/yaml` with
+  CORS `*`, behind the proxy with its security headers.
 
 ## [26.11.5] - 2026-11-23
 
