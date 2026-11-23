@@ -254,11 +254,13 @@ def test_external_services_give_urls_but_no_local_hosts(tmp_path):
     assert v["ifdd_oidc_realm"] == "https://oidc.example.org/realms/dev"
     assert v["ifdd_be_url"] == "https://data.dev.cache.example.org"
     assert v["ifdd_schema_url"] == "https://schema.model.example.org/v1"
-    internal = v["ifdd_proxy_internal_hosts"].split(", ")
-    assert "data.dev.cache.example.org" in internal
-    assert "oidc.example.org" not in internal and "schema.model.example.org" not in internal
-    assert "oidc.example.org" not in result.files["hosts.txt"]
-    assert "https://oidc.example.org" in v["ifdd_proxy_csp_ui"]
+    internal = set(v["ifdd_proxy_internal_hosts"].split(", "))
+    assert {"data.dev.cache.example.org"} <= internal
+    assert not {"oidc.example.org", "schema.model.example.org"} & internal
+    hosts_lines = set(result.files["hosts.txt"].splitlines())
+    assert "data.dev.cache.example.org" in hosts_lines
+    assert "oidc.example.org" not in hosts_lines
+    assert "https://oidc.example.org" in v["ifdd_proxy_csp_ui"].split()
     settings_text = result.files["ifdd-meta.yaml"]
     assert "external: [keycloak, schema, type, unit]\n" in settings_text
     assert "keycloak_secrets: keycloak-secrets.env\n" in settings_text

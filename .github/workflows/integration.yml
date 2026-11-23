@@ -182,7 +182,9 @@ jobs:
           ifdd-meta --settings "$DEV/ifdd-meta.yaml" status
           IFDD_META_TESTS="write" ifdd-meta --settings "$DEV/ifdd-meta.yaml" test -v \
             --junit ci-run/artefacts/junit-dev.xml
-          ifdd-meta --settings "$DEV/ifdd-meta.yaml" down --purge
+          # Without --purge: proxy-net is shared with the first installation here
+          # (on separate servers it is not), so it cannot be removed yet.
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" down
           ifdd-meta --settings "$DEV/ifdd-meta.yaml" local-setup --remove > ci-run/artefacts/local-setup-dev-remove.txt
           grep -v '^#' ci-run/artefacts/local-setup-dev-remove.txt | bash -e
 
