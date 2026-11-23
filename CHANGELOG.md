@@ -2,7 +2,7 @@
 
 The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
-## [Unreleased]
+## [26.11.5] - 2026-11-23
 
 - `docs/demo-server.md`: the cron script sets `PATH` to `~/.local/bin` itself,
   so a first run in the shell that just installed uv finds it; the private env
