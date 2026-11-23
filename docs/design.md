@@ -259,8 +259,38 @@ HTTPS). With short names and a local CA the result equals the defaults.
 The generated variables file stays explicit (rule B.3) and reaches cruft unchanged.
 `compile --check` fails if the files on disk differ from a fresh compilation.
 Generated files are always overwritten as a whole; changes go into the
-description or its `overrides`. One description describes one server; the format
-leaves room for a later `servers:` list.
+description or its `overrides`.
+
+**Several servers.** One description describes one server. Every service is
+local, external or absent; host names and URLs depend only on the names, never
+on where a service runs. Local-only concerns (instances, proxy aliases, DNS
+records in `hosts.txt`, CA copies, wheels) apply to local services only. For
+that, `services` may be a mapping with one block per service:
+
+```yaml
+services:
+  proxy: {host: proxy.dev.example.ifdd.de}   # host of the dashboard
+  be: {host: data.dev.cache.example.ifdd.de}
+  ts-api: {}                                  # no host of its own
+  keycloak: {host: oidc.example.ifdd.de, external: true}
+  wf: {ref: v26.11.2}                         # instead of templates.refs
+  git: {host: git.dev.example.ifdd.de}        # host only, no service
+ca_certs: [certs/root.crt, certs/sub.crt]     # further CAs, relative to this file
+```
+
+The list form stays valid. `compile` rejects an unknown service, a host for a
+service without one, a service without a host when there is no `hosts.suffix`,
+an external service that has no host of its own (ct, ts-api), and a local service
+whose dependency is neither local nor external (catalogue `DEPENDENCIES`; ts-api
+needs ts locally). Keycloak is the only service whose secrets cross servers:
+`ifdd-meta keycloak secrets --realm R` prints the client secrets of a realm as
+`VARIABLE=value` lines on stdout (never to a terminal), and `create` on the
+other server reads them from the file of the setting `keycloak_secrets` (mode
+0600 required) instead of `keycloak/.env`. Of `ca_certs`, `create` copies each as
+`certs/extra-<name>.crt` into the instances that copy `certs/*.crt`; ct, which
+reads a single file, gets `certs/ca-bundle.crt` (local CA first, then the
+extras) unless the TLS mode is Let's Encrypt. Control from a separate machine
+(for instance over ssh without agent forwarding) is not part of the tool.
 
 ## 11. From the old meta repository
 

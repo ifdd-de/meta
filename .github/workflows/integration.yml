@@ -90,6 +90,10 @@ jobs:
           git config --global user.name "ifdd-meta CI"
           git config --global user.email "ci@example.org"
           ifdd-meta --settings "$SETTINGS" create
+          # 127.0.0.1 only: the second server (step below) binds 127.0.0.2 of this
+          # runner. The template takes port numbers only, so the CI edits the .env.
+          sed -i -E 's/^(IFDD_PROXY_HTTPS?_PORT)=/\1=127.0.0.1:/' ci-run/work/proxy/.env
+          grep -E '^IFDD_PROXY_HTTPS?_PORT=' ci-run/work/proxy/.env
 
       - name: Local setup (/etc/hosts and the local CA)
         run: |
@@ -156,6 +160,42 @@ jobs:
         run: >-
           ifdd-meta --settings "$SETTINGS" test -v --junit ci-run/artefacts/junit.xml
           --screenshots ci-run/artefacts/screenshots
+
+      - name: Second server (Keycloak, schema, type, unit of the first)
+        run: |
+          # Like the stages int and dev: an installation of its own that uses
+          # services of the first one. Both share the Docker networks proxy-net
+          # (the network aliases stand in for DNS) but not the ingest network.
+          DEV=ci-dev
+          python tools/ci/second_server.py ci-run/installation.yaml \
+            ci-run/work/proxy/certs/ca.crt "$DEV"
+          (umask 077 && ifdd-meta --settings "$SETTINGS" keycloak secrets > "$DEV/keycloak-secrets.env")
+          ifdd-meta compile "$DEV/installation.yaml"
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" config check
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" create
+          sed -i -E 's/^(IFDD_PROXY_HTTPS?_PORT)=/\1=127.0.0.2:/' "$DEV/work/dev_proxy/.env"
+          sed -i 's/^127\.0\.0\.1 /127.0.0.2 /' "$DEV/hosts.txt"
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" local-setup > ci-run/artefacts/local-setup-dev.txt
+          grep -v '^#' ci-run/artefacts/local-setup-dev.txt | bash -e
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" build
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" up
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" status
+          IFDD_META_TESTS="write" ifdd-meta --settings "$DEV/ifdd-meta.yaml" test -v \
+            --junit ci-run/artefacts/junit-dev.xml
+          # Without --purge: proxy-net is shared with the first installation here
+          # (on separate servers it is not), so it cannot be removed yet.
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" down
+          ifdd-meta --settings "$DEV/ifdd-meta.yaml" local-setup --remove > ci-run/artefacts/local-setup-dev-remove.txt
+          grep -v '^#' ci-run/artefacts/local-setup-dev-remove.txt | bash -e
+
+      - name: Second server, errors
+        if: failure()
+        run: |
+          for log in ci-dev/work/logs/*.log; do
+            [ -f "$log" ] || continue
+            echo "== $log"
+            grep -iE 'error|fail|traceback' "$log" | tail -n 40 || true
+          done
 
       - name: Rebuild (the weekly run of the demo server)
         run: |

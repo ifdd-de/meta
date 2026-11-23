@@ -62,10 +62,55 @@ such as `ci.test`. The only example is the description of the public demo,
 [`config/demo/installation.yaml`](config/demo/installation.yaml); its host names
 lie below `example.ifdd.de`, which is reserved for examples.
 
+### Services of other servers
+
+`services` can also be a mapping with one block per service. A block may set
+the host (`host:`), mark the service as running on another server
+(`external: true`) and name a template reference (`ref:`; then there is no
+`templates.refs`). An external service gets host and URLs in the variables
+file, but no instance, no proxy alias, no DNS record and no CA copy. Every
+service that a local one needs must be local or external, otherwise `compile`
+stops (ts-api needs ts on the same server). `ca_certs` lists further CA
+certificates, relative to the description: `create` copies them into every
+instance that trusts CAs and gives ct one bundle file.
+
+```yaml
+installation: dev
+tls: letsencrypt
+realm: ifdd-dev
+templates:
+  ref: v26.11.3
+services:
+  proxy: {}
+  be: {host: data.dev.cache.example.ifdd.de}
+  ui: {host: ui.dev.example.ifdd.de}
+  ts: {host: ts.dev.example.ifdd.de}
+  ts-api: {}
+  keycloak: {host: oidc.example.ifdd.de, external: true}
+  schema: {host: schema.example.ifdd.de, external: true}
+  type: {host: type.model.example.ifdd.de, external: true}
+  unit: {host: unit.model.example.ifdd.de, external: true}
+ca_certs: [certs/company-ca.crt]
+```
+
+With an external Keycloak the client secrets come from a file (setting
+`keycloak_secrets`, default `keycloak-secrets.env` next to the settings, mode
+0600). The server that runs Keycloak writes it for one realm; the tool refuses
+to write it to a terminal:
+
+```bash
+(umask 077 && uv run ifdd-meta --settings prod/ifdd-meta.yaml \
+    keycloak secrets --realm ifdd-dev > keycloak-secrets.env)
+```
+
+Copy the file to the other server without putting it into a shell history or a
+repository.
+
 `config check` compares the variables file with the `cookiecutter.json` of
 every template at the chosen reference: a missing variable, one that no template
 defines, a version, a secret-like name, a malformed choice or Jinja that refers
-to another variable is an error.
+to another variable is an error. A template that the description does not use
+and that is missing at the reference only gives a note.
 
 ## Create the instances
 

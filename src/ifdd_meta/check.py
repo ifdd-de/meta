@@ -3,6 +3,11 @@
 Read-only. Rule B.3 makes a missing template variable an error; a variable no
 template defines is an error as well, because cookiecutter would ignore it
 silently.
+
+The templates of the installation (its services, local and external) must be
+found at their references. A template it does not use may be missing at the
+reference (e.g. lab before its first tag in that round): then only its own
+variables (``ifdd_<service>_*``) go unchecked, and the report says so.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ class Report:
     findings: list[Finding]
     variables: int
     templates: int
+    notes: tuple[str, ...] = ()
 
 
 def run(settings: Settings, fetch=cookiecutter_json) -> Report:
@@ -44,26 +50,38 @@ def run(settings: Settings, fetch=cookiecutter_json) -> Report:
     if not isinstance(context, dict):
         return Report([Finding(f"variables file {path}: no mapping 'default_context'")], 0, 0)
 
+    used = {*settings["services"], *settings["external"]}
     defined: dict[str, tuple[str, object]] = {}  # variable -> (first template, default)
     per_service: dict[str, set[str]] = {}
+    notes: list[str] = []
+    unchecked: list[str] = []  # prefixes of variables of templates not found and not used
     for service in SERVICES:
         ref = settings.ref(service)
         try:
             template = fetch(settings["templates.source"], service, ref)
         except TemplateError as error:
-            findings.append(Finding(str(error)))
+            if service in used:
+                findings.append(Finding(str(error)))
+            else:
+                prefix = f"ifdd_{service.replace('-', '_')}_"
+                unchecked.append(prefix)
+                notes.append(
+                    f"template {service} (not used) not found at {ref}: {prefix}* unchecked"
+                )
             continue
         names = {key for key in template if not key.startswith("_")}
         per_service[service] = names
         for name in names:
             defined.setdefault(name, (service, template[name]))
-    if len(per_service) < len(SERVICES):
-        return Report(findings, len(context), len(per_service))
+    if findings:
+        return Report(findings, len(context), len(per_service), tuple(notes))
 
     for service in settings["services"]:
         for name in sorted(per_service[service] - set(context) - VERSION_VARIABLES):
             findings.append(Finding(f"{name} (template {service}) is missing"))
     for name in sorted(set(context) - set(defined)):
+        if name.startswith(tuple(unchecked)):
+            continue
         findings.append(Finding(f"{name} is defined by no template; cookiecutter would ignore it"))
     for name in sorted(set(context) & VERSION_VARIABLES):
         findings.append(Finding(f"{name} must not be set; versions come from the template"))
@@ -73,7 +91,7 @@ def run(settings: Settings, fetch=cookiecutter_json) -> Report:
         value = context[name]
         if name in defined:
             findings.extend(_check_value(name, value, defined[name][1]))
-    return Report(findings, len(context), len(per_service))
+    return Report(findings, len(context), len(per_service), tuple(notes))
 
 
 def _check_value(name: str, value: object, default: object) -> list[Finding]:

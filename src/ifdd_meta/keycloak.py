@@ -15,12 +15,14 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from . import envfile
+from .catalogue import KEYCLOAK_EXPORTS
 from .create import load_state
 from .settings import Settings
 
@@ -36,12 +38,60 @@ class KeycloakError(RuntimeError):
         self.status = status
 
 
-def ssl_context(ca_file: Path | None) -> ssl.SSLContext:
-    """System CAs, plus the local CA of the proxy if there is one."""
+def ssl_context(ca_files: Path | Iterable[Path] | None) -> ssl.SSLContext:
+    """System CAs, plus the local CA of the proxy and the setting ca_certs."""
     context = ssl.create_default_context()
-    if ca_file and ca_file.is_file():
-        context.load_verify_locations(cafile=str(ca_file))
+    files = [ca_files] if isinstance(ca_files, Path) else list(ca_files or ())
+    for ca_file in files:
+        if ca_file and ca_file.is_file():
+            context.load_verify_locations(cafile=str(ca_file))
     return context
+
+
+def trust_files(settings: Settings, state: Mapping[str, str]) -> list[Path]:
+    """CA files the host trusts for this installation: the local CA, then ca_certs."""
+    files = []
+    if "proxy" in state:
+        local = settings["workdir"] / state["proxy"] / "certs" / "ca.crt"
+        if local.is_file():
+            files.append(local)
+    return files + list(settings["ca_certs"])
+
+
+def realm_suffix(realm: str) -> str:
+    """Suffix of the secrets of a further realm in keycloak/.env (as the template)."""
+    return realm.replace(".", "_").replace("-", "_").upper()
+
+
+def export_secrets(settings: Settings, realm: str | None) -> list[str]:
+    """Lines VARIABLE=value with the client secrets of a realm, for the server that uses it.
+
+    The names are those of the realm of the instance (without suffix), so the
+    file reads on the other server like a keycloak/.env of its own.
+    """
+    state = load_state(settings)
+    if "keycloak" not in state:
+        raise KeycloakError("no keycloak instance; run 'ifdd-meta create' first")
+    variables = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))
+    main = variables["default_context"]["ifdd_keycloak_realm"]
+    extra = [
+        r.strip()
+        for r in variables["default_context"].get("ifdd_keycloak_extra_realms", "").split(",")
+        if r.strip()
+    ]
+    realm = realm or main
+    if realm != main and realm not in extra:
+        known = ", ".join([main, *extra])
+        raise KeycloakError(f"realm {realm!r} is not a realm of this Keycloak ({known})")
+    env = envfile.read(settings["workdir"] / state["keycloak"] / ".env")
+    lines = []
+    for variable in KEYCLOAK_EXPORTS:
+        name = variable if realm == main else f"{variable}_{realm_suffix(realm)}"
+        if env.get(name):
+            lines.append(f"{variable}={env[name]}")
+    if not lines:
+        raise KeycloakError(f"no client secrets of realm {realm!r} in keycloak/.env")
+    return lines
 
 
 def request(
@@ -101,7 +151,9 @@ class Admin:
         self.created_roles: list[tuple[str, str]] = []
 
     @classmethod
-    def from_instance(cls, keycloak_dir: Path, realm: str, ca_file: Path | None) -> Admin:
+    def from_instance(
+        cls, keycloak_dir: Path, realm: str, ca_file: Path | Iterable[Path] | None
+    ) -> Admin:
         env = envfile.read(keycloak_dir / ".env")
         keys = ("IFDD_KEYCLOAK_HOST", "IFDD_KEYCLOAK_ADMIN_USER", "IFDD_KEYCLOAK_ADMIN_PASSWORD")
         for key in keys:
@@ -123,8 +175,9 @@ class Admin:
             raise KeycloakError("no keycloak instance; run 'ifdd-meta create' first")
         variables = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))
         realm = variables["default_context"]["ifdd_keycloak_realm"]
-        ca = settings["workdir"] / state["proxy"] / "certs" / "ca.crt" if "proxy" in state else None
-        return cls.from_instance(settings["workdir"] / state["keycloak"], realm, ca)
+        return cls.from_instance(
+            settings["workdir"] / state["keycloak"], realm, trust_files(settings, state)
+        )
 
     def _login(self) -> str:
         try:

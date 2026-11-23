@@ -38,7 +38,7 @@ def test_demo_description_of_the_repository():
         ("installation: x\nfoo: 1\n", "unknown keys: foo"),
         ("installation: x\nhosts:\n  suffix: nodot\n", "domain name"),
         ("installation: x\ntls: acme\n", "tls must be one of"),
-        ("installation: x\ntls: letsencrypt\n", "needs hosts.suffix"),
+        ("installation: x\ntls: letsencrypt\n", "needs public names"),
         ("installation: x\ncontact: nobody\n", "e-mail"),
         ("installation: x\ntemplates:\n  refs: [be]\n", "templates.refs must be a mapping"),
         ("installation: x\ntemplates:\n  refs:\n    web: main\n", "unknown service 'web'"),
@@ -63,3 +63,73 @@ def test_numbers_in_overrides_become_text(tmp_path):
         describe(tmp_path, "installation: x\noverrides:\n  ifdd_be_max_workers: 8\n")
     )
     assert description.overrides == {"ifdd_be_max_workers": "8"}
+
+
+DEV = """\
+installation: dev
+tls: own
+realm: dev
+templates:
+  ref: v1
+services:
+  proxy: {}
+  be: {host: data.dev.cache.example.org}
+  ui: {host: ui.dev.cache.example.org}
+  ts: {host: ts.dev.cache.example.org}
+  ts-api: {}
+  ct: {}
+  keycloak: {host: oidc.example.org, external: true, ref: v2}
+  schema: {host: schema.model.example.org, external: true}
+  type: {host: type.model.example.org, external: true}
+  unit: {host: unit.model.example.org, external: true}
+"""
+
+
+def test_service_blocks_local_external_hosts_and_refs(tmp_path):
+    d = load(describe(tmp_path, DEV))
+    assert d.services == ("proxy", "be", "ui", "ct", "ts", "ts-api")
+    assert d.external == ("keycloak", "schema", "type", "unit")
+    assert d.host("id") == "oidc.example.org"
+    assert d.host("rest") == "data.dev.cache.example.org"
+    assert d.refs == {"keycloak": "v2"}
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (("  ct: {}\n", "  ct: {external: true}\n"), "only a service with a host"),
+        (("  proxy: {}\n", "  proxy: {external: true}\n"), "only a service with a host"),
+        (("  ct: {}\n", "  ct: {host: ct.example.org}\n"), "has no host of its own"),
+        (("  ct: {}\n", "  ct: {port: 1}\n"), "unknown keys: port"),
+        (("external: true}\n", "external: yes please}\n"), "true or false"),
+        (("  schema: {host: schema.model.example.org, external: true}\n", ""), "be needs schema"),
+        (("  ts: {host: ts.dev.cache.example.org}\n", "  ts: {host: ts.x.org, external: true}\n"),
+         "ts-api needs ts on the same server"),
+        (("  ui: {host: ui.dev.cache.example.org}\n", "  ui: {}\n"), "no host for ui"),
+        (("  ref: v1\n", "  ref: v1\n  refs: {be: v3}\n"), "put each ref into its block"),
+        (("  ct: {}\n", "  ct: {}\n  git: {host: git.example.org, external: true}\n"),
+         "takes only a host"),
+    ],
+)  # fmt: skip
+def test_invalid_service_blocks(tmp_path, change, message):
+    old, new = change
+    assert old in DEV
+    with pytest.raises(DescriptionError, match=message):
+        load(describe(tmp_path, DEV.replace(old, new, 1)))
+
+
+def test_short_form_also_checks_dependencies(tmp_path):
+    with pytest.raises(DescriptionError, match="be needs keycloak, schema"):
+        load(describe(tmp_path, "installation: x\nservices: [proxy, be]\n"))
+
+
+def test_ca_certs_must_exist_and_differ(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "ca.crt").write_text("x")
+    (tmp_path / "ca.crt").write_text("x")
+    ok = load(describe(tmp_path, "installation: x\nca_certs: [a/ca.crt]\n"))
+    assert ok.ca_certs == ("a/ca.crt",)
+    with pytest.raises(DescriptionError, match="file not found: b.crt"):
+        load(describe(tmp_path, "installation: x\nca_certs: [b.crt]\n"))
+    with pytest.raises(DescriptionError, match="names must differ"):
+        load(describe(tmp_path, "installation: x\nca_certs: [a/ca.crt, ca.crt]\n"))

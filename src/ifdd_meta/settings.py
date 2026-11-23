@@ -80,6 +80,12 @@ FIELDS = (
     Field("wf_git", "choice", "external", WF_GIT_MODES),
     Field("git_host", "str", "git"),
     Field("tests", "choice", "read", TEST_MODES),
+    #: services of this installation that run on another server (e.g. keycloak)
+    Field("external", "list", [], SERVICES),
+    #: CA certificates the services trust besides the local CA (copied into certs/)
+    Field("ca_certs", "paths", []),
+    #: client secrets of an external Keycloak (from 'ifdd-meta keycloak secrets')
+    Field("keycloak_secrets", "path", "keycloak-secrets.env"),
 )
 _BY_NAME = {field.name: field for field in FIELDS}
 
@@ -240,6 +246,12 @@ def _convert(field: Field, raw: Any, relative_to: Path) -> Any:
         if len(set(items)) != len(items):
             raise SettingsError("names must not repeat")
         return tuple(item for item in field.choices if item in items)
+    if field.kind == "paths":
+        items = [item.strip() for item in raw.split(",")] if isinstance(raw, str) else raw
+        if not isinstance(items, list) or not all(isinstance(i, str) and i.strip() for i in items):
+            raise SettingsError("expected a list of paths")
+        paths = [Path(item.strip()).expanduser() for item in items]
+        return tuple(p if p.is_absolute() else relative_to / p for p in paths)
     if field.kind == "mapping":
         if not isinstance(raw, dict) or not all(
             isinstance(k, str) and isinstance(v, str) and v for k, v in raw.items()
@@ -256,7 +268,7 @@ def _convert(field: Field, raw: Any, relative_to: Path) -> Any:
 
 def _display(value: Any) -> str:
     if isinstance(value, tuple):
-        return ", ".join(value)
+        return ", ".join(map(str, value)) or "(none)"
     if isinstance(value, dict):
         return ", ".join(f"{key}={val}" for key, val in value.items()) or "(none)"
     return str(value)

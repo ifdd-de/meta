@@ -28,6 +28,18 @@ HOST_LABELS = {
     "wf": "wf",
     "lab": "lab",
 }
+#: Services a service calls; compile stops unless each is local or external.
+DEPENDENCIES = {
+    "be": ("keycloak", "schema"),
+    "ui": ("keycloak", "be", "type", "unit"),
+    "ts": ("keycloak", "be"),
+    "ts-api": ("keycloak", "type", "ts"),
+    "ct": ("keycloak", "be", "schema"),
+    "wf": ("keycloak", "be"),
+    "lab": ("keycloak", "be"),
+}
+#: Services a service needs on the same server (ts-api writes into the ingest network of ts).
+LOCAL_DEPENDENCIES = {"ts-api": ("ts",)}
 #: Host label of the Traefik dashboard; it gets no network alias and no DNS record.
 DASHBOARD_LABEL = "proxy"
 #: Host label of the local Git server for the wf flows (setting wf_git: local).
@@ -98,6 +110,17 @@ SECRET_COPIES = (
     ("lab", "IFDD_KEYCLOAK_LAB_CLIENT_SECRET", "new-file", "secrets/oidc_client_secret", ""),
 )
 
+#: Client secrets that 'ifdd-meta keycloak secrets' passes to the server of another
+#: realm: those the services take (SECRET_COPIES) and those the integration tests use.
+#: Never the user admin: its manage-users can grant every realm role.
+KEYCLOAK_EXPORTS = tuple(dict.fromkeys(
+    [variable for _, variable, *_ in SECRET_COPIES] + ["IFDD_KEYCLOAK_TSINGEST_CLIENT_SECRET"]
+))  # fmt: skip
+#: File names of the CA certificates in certs/ of the CA users: the local CA, the
+#: bundle of all for settings that take one file (CA_FILE_SETTINGS), the extra ones.
+CA_BUNDLE = "ca-bundle.crt"
+EXTRA_CA_PREFIX = "extra-"
+
 #: Files that survive "down --purge" (relative to the instance), e.g. the ACME state.
 PERSIST = {"proxy": ("letsencrypt/acme.json",)}
 #: Docker volumes (Compose names) that survive "down --purge"; the next instance of
@@ -108,13 +131,18 @@ PERSIST_VOLUMES = {"lab": ("dind-data",)}
 NO_ROOT = ("keycloak", "ts")
 
 __all__ = [
+    "CA_BUNDLE",
     "CA_FILE_SETTINGS",
     "CA_USERS",
     "DASHBOARD_LABEL",
+    "DEPENDENCIES",
+    "EXTRA_CA_PREFIX",
     "GIT_LABEL",
     "GIT_REPOSITORY",
     "GIT_USER",
     "HOST_LABELS",
+    "KEYCLOAK_EXPORTS",
+    "LOCAL_DEPENDENCIES",
     "LAB_CLIENT_ID",
     "NO_ROOT",
     "PERSIST",
