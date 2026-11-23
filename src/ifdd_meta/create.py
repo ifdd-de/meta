@@ -20,7 +20,16 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from . import copysecret, gitserver
-from .catalogue import CA_USERS, NO_ROOT, PERSIST, SECRET_COPIES, SERVICES, SKIPS, WHEELS
+from .catalogue import (
+    CA_FILE_SETTINGS,
+    CA_USERS,
+    NO_ROOT,
+    PERSIST,
+    SECRET_COPIES,
+    SERVICES,
+    SKIPS,
+    WHEELS,
+)
 from .runner import Run, StepError
 from .settings import Settings
 from .templates import location
@@ -230,7 +239,10 @@ def _copy_wheels(settings: Settings, state, services, run: Run) -> None:
 def _certificates(settings: Settings, state, services, run: Run) -> None:
     workdir: Path = settings["workdir"]
     mode = settings["tls"]
-    if mode == "letsencrypt" or "proxy" not in state:
+    if mode == "letsencrypt":
+        _system_trust(settings, state, run)
+        return
+    if "proxy" not in state:
         return
     proxy = workdir / state["proxy"]
     ca = proxy / "certs" / "ca.crt"
@@ -253,6 +265,16 @@ def _certificates(settings: Settings, state, services, run: Run) -> None:
             shutil.copy2(ca, target / "ca.crt")
             run.note(f"{ca} -> {target}")
     run.overview(f"Local CA: {ca} (trust it in the browser or the operating system)")
+
+
+def _system_trust(settings: Settings, state, run: Run) -> None:
+    """Let's Encrypt: no local CA, so settings that name its file must be empty."""
+    for service, path, variable in CA_FILE_SETTINGS:
+        if service not in state:
+            continue
+        target = settings["workdir"] / state[service] / path
+        if copysecret.clear_env(target, variable):
+            run.overview(f"{service}/{path}: {variable} emptied (Let's Encrypt: system trust)")
 
 
 def _secrets(settings: Settings, state, run: Run) -> None:

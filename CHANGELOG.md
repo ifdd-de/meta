@@ -7,6 +7,10 @@ The version scheme follows the other IFDD repositories: `YY.MM.N`.
 - `docs/demo-server.md`: the cron script sets `PATH` to `~/.local/bin` itself,
   so a first run in the shell that just installed uv finds it; the private env
   file is created with mode 0600 without changing the umask of the shell.
+- `create` with Let's Encrypt empties `IFDD_CT_CA_BUNDLE` in `ct/.env`: the
+  template points it at `/certs/ca.crt`, which only exists with a local CA, and
+  ct then failed every HTTPS call (found on the demo server: `demo load` could
+  not load the JSON-LD contexts).
 
 ## [26.11.4] - 2026-11-22
 
