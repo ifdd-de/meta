@@ -76,3 +76,21 @@ def test_set_env_creates_replaces_and_adds(tmp_path):
     assert env.read_text() == "# comment\nB=x\nA=three\n" and mode(env) == 0o640
     with pytest.raises(copysecret.SecretError, match="would need quotes"):
         copysecret.set_env(env, "A", "with space")
+
+
+def test_clear_env_empties_only_the_value(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("A=1\nexport IFDD_CT_CA_BUNDLE=/certs/ca.crt\nB=2\n")
+    path.chmod(0o640)
+    assert copysecret.clear_env(path, "IFDD_CT_CA_BUNDLE") is True
+    assert path.read_text() == "A=1\nexport IFDD_CT_CA_BUNDLE=\nB=2\n"
+    assert path.stat().st_mode & 0o777 == 0o640
+    assert copysecret.clear_env(path, "IFDD_CT_CA_BUNDLE") is False  # already empty
+
+
+def test_clear_env_without_file_or_variable(tmp_path):
+    path = tmp_path / ".env"
+    assert copysecret.clear_env(path, "X") is False
+    path.write_text("A=1\n")
+    assert copysecret.clear_env(path, "X") is False
+    assert path.read_text() == "A=1\n"

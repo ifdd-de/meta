@@ -27,7 +27,10 @@ FILES = {
         "IFDD_KEYCLOAK_LAB_CLIENT_SECRET=lab1\n",
     },
     "be": {"certs/README.md": "x"},
-    "ct": {"certs/README.md": "x", ".env": "IFDD_CT_OIDC_CLIENT_SECRET=\n"},
+    "ct": {
+        "certs/README.md": "x",
+        ".env": "IFDD_CT_OIDC_CLIENT_SECRET=\nIFDD_CT_CA_BUNDLE=/certs/ca.crt\n",
+    },
     "ts": {"certs/README.md": "x", "secrets/oidc_client_secret": ""},
     "ts-api": {"certs/README.md": "x"},
     "wf": {"certs/README.md": "x", "secrets/kestra.env": "SECRET_IFDD_API_CLIENT_SECRET=\n"},
@@ -177,6 +180,25 @@ def test_lets_encrypt_creates_no_local_ca(tmp_path, templates):
     _, lines = run_create(settings)
     assert not (settings["workdir"] / "proxy" / "certs").exists()
     assert not any("local CA" in line for line in lines)
+
+
+def test_lets_encrypt_empties_the_ca_file_of_ct(tmp_path, templates):
+    # The template points ct at /certs/ca.crt; without a local CA that file is missing
+    # and every HTTPS call of ct fails (found on the demo server).
+    settings = settings_for(tmp_path, templates, "tls: letsencrypt\nservices: [proxy, ct]\n")
+    _, lines = run_create(settings)
+    env = (settings["workdir"] / "ct" / ".env").read_text()
+    assert "IFDD_CT_CA_BUNDLE=\n" in env
+    assert "IFDD_CT_OIDC_CLIENT_SECRET=\n" in env
+    assert any("IFDD_CT_CA_BUNDLE emptied" in line for line in lines)
+
+
+def test_local_ca_keeps_the_ca_file_of_ct(tmp_path, templates):
+    settings = settings_for(tmp_path, templates, "services: [proxy, ct]\n")
+    run_create(settings)
+    work = settings["workdir"]
+    assert "IFDD_CT_CA_BUNDLE=/certs/ca.crt\n" in (work / "ct" / ".env").read_text()
+    assert (work / "ct" / "certs" / "ca.crt").is_file()
 
 
 def test_own_certificates_are_left_to_the_operator(tmp_path, templates):

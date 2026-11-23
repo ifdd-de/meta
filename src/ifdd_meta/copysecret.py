@@ -78,6 +78,24 @@ def write_env(path: Path, variable: str, value: str, kestra: bool = False) -> bo
     return changed
 
 
+def clear_env(path: Path, variable: str) -> bool:
+    """Empty the value of ``variable`` in a .env file; False if the file, the
+    variable or a value is missing."""
+    if not path.is_file():
+        return False
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    pattern = re.compile(rf"(\s*(?:export\s+)?{re.escape(variable)}=)(.*?)(\r?\n)?$")
+    changed = False
+    for index, line in enumerate(lines):
+        match = pattern.match(line)
+        if match and match.group(2).strip():
+            lines[index] = f"{match.group(1)}{match.group(3) or ''}"
+            changed = True
+    if changed:
+        _write_atomically(path, "".join(lines), path.stat().st_mode & 0o777)
+    return changed
+
+
 def set_env(path: Path, variable: str, value: str, new_mode: int = 0o600) -> None:
     """Set ``variable`` in a .env file: a new file (``new_mode``), the line replaced or added."""
     _check_directory(path)

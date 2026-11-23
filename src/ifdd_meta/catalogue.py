@@ -61,6 +61,10 @@ SKIPS = {
 
 #: Services that call others through the proxy and need its local CA in certs/.
 CA_USERS = ("be", "ct", "ts", "ts-api", "wf", "lab")
+#: Settings that name the file of the local CA inside the container: (service,
+#: file, variable). With Let's Encrypt there is no such file, so create empties
+#: them and the service uses the system trust store.
+CA_FILE_SETTINGS = (("ct", ".env", "IFDD_CT_CA_BUNDLE"),)
 
 #: Optional wheels of unreleased builds: package -> (service, file pattern).
 WHEELS = {
@@ -104,6 +108,7 @@ PERSIST_VOLUMES = {"lab": ("dind-data",)}
 NO_ROOT = ("keycloak", "ts")
 
 __all__ = [
+    "CA_FILE_SETTINGS",
     "CA_USERS",
     "DASHBOARD_LABEL",
     "GIT_LABEL",
