@@ -12,7 +12,14 @@ ROUTES = [
     ("schema", "ifdd_schema_url", "/product.jsonld", "ifdd_proxy_csp_api"),
     ("type", "ifdd_type_url", "/climate.ops.example.ifdd.de/", "ifdd_proxy_csp_api"),
     ("unit", "ifdd_unit_url", "/unit/DEG_C", "ifdd_proxy_csp_api"),
+    ("model", "ifdd_model_host", "/v1/type/product.yaml", "ifdd_proxy_csp_api"),
 ]
+
+
+def base_url(variables: dict, variable: str) -> str:
+    """A URL variable as it is, a host variable (model has no URL variable) as https://host."""
+    value = variables[variable]
+    return f"https://{value}" if variable.endswith("_host") else value
 
 
 @pytest.mark.parametrize(("service", "variable", "path", "csp"), ROUTES)
@@ -22,7 +29,7 @@ def test_security_headers(installation, http, service, variable, path, csp):
     variables = installation.variables
     if variables["ifdd_proxy_enable_security_headers"] != "y":
         pytest.skip("security headers are off (ifdd_proxy_enable_security_headers)")
-    answer = http.get(variables[variable] + path)
+    answer = http.get(base_url(variables, variable) + path)
     assert answer.status_code == 200, f"HTTP {answer.status_code}: {answer.text[:300]}"
     expected = {
         "x-content-type-options": "nosniff",

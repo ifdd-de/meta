@@ -103,6 +103,7 @@ def test_build_uses_compose_and_the_adm_scripts(world):
         f"time-series-api {compose} build",
         "wf adm_01_build.sh production",
         "lab adm_01_build.sh ",
+        f"model {compose} pull",  # the nginx image only; the builder is not run
     ]
     assert lines[0] == "==> Building proxy (production)"
 
@@ -126,6 +127,7 @@ def test_up_creates_networks_and_keeps_the_order(world):
         f"schema {compose} up --detach {wait}",
         f"type {compose} up --detach {wait}",
         f"unit {compose} up --detach {wait}",
+        f"model {compose} up --detach {wait}",
         f"proxy {compose} up --detach {wait}",
         "wf adm_02_run.sh production",
         f"time-series adm_02_run.sh production {wait}",
@@ -175,7 +177,7 @@ def test_down_and_purge_keep_the_acme_state(world):
     services.down(s, run, purge=True)
     stopped = [c.split()[0] for c in calls(world) if " down " in c]
     assert stopped == [
-        "lab", "time-series-api", "time-series", "wf", "proxy", "unit", "type",
+        "lab", "time-series-api", "time-series", "wf", "proxy", "model", "unit", "type",
         "schema", "frontend", "backend", "keycloak",
     ]  # fmt: skip
     downs = [c for c in calls(world) if " down " in c]
@@ -204,12 +206,14 @@ def test_purge_with_only_is_refused(world):
 def test_status_and_logs(world):
     rows = services.status(settings(world))
     assert ("be", "backend-1", "running", "healthy") in rows
-    assert all(row[0] not in ("ct", "model") for row in rows)
+    assert ("model", "model-1", "running", "healthy") in rows  # a web service since 26.11.6
+    assert all(row[0] != "ct" for row in rows)
     assert {row[0] for row in services.status(settings(world), only=["be", "ui"])} == {"be", "ui"}
     run, _ = run_for(world)
     written = services.logs(settings(world), run, world / "out")
     assert (world / "out" / "be.log").read_text() == "log of backend\n"
-    assert len(written) == len(SERVICES) - 2
+    assert (world / "out" / "model.log").read_text() == "log of model\n"
+    assert len(written) == len(SERVICES) - 1  # all but ct
 
 
 def test_without_instances(tmp_path):

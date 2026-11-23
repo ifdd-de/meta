@@ -103,13 +103,13 @@ What the tool knows about each template is data in the package, not configuratio
 | ts-api | `.env`, `certs` | yes | compose | compose |
 | wf | `.env`, `secrets`, `certs` | yes | `adm_01_build.sh` | `adm_02_run.sh` |
 | lab (optional) | `.env`, `secrets`, `certs`, `hub/config.d` | yes | `adm_01_build.sh` | `adm_02_run.sh` (production only) |
-| model | `.env`, `src/linkml`, `tests/reference` | – | – | – (`just test`; `just publish` later) |
+| model (26.11.6 or later) | `.env`, `src/linkml`, `tests/reference` | – | compose (pull; `just build` is not run) | compose |
 
 The skip paths are those the template READMEs recommend (handover B.5); the
 catalogue closes the gaps of the old meta repository (wf, ts).
 
 **Start order:** networks → proxy (Traefik only) → keycloak, be, ui, schema, type,
-unit → proxy (all services, oauth2-proxy needs the realm) → Git server for wf
+unit, model → proxy (all services, oauth2-proxy needs the realm) → Git server for wf
 (`wf_git: local`; user, repository and token are created here) → wf → ts →
 ts-api → lab (its hub needs Keycloak and be). The networks are `proxy-net`, the
 ingest network of ts and, with lab, `lab-net` (internal); the proxy joins

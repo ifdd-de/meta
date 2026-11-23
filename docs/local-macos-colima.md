@@ -119,7 +119,7 @@ templates:
     unit: v26.11.1
     ct: v26.11.1
     ts: v26.11.1
-    model: v26.11.1
+    model: v26.11.6
 EOF
 printf 'IFDD_META_WORKDIR=%s\nIFDD_META_PERSIST=%s\nIFDD_META_TESTS=write\n' \
     "$IFDD_RUN/work" "$IFDD_RUN/state" > .env

@@ -196,7 +196,7 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml down [--purge]
 container of the Traefik image looks for the state file; a daemon in a VM such
 as Colima sees only shared directories), then creates the Docker networks,
 starts Traefik alone, then keycloak, be, ui,
-schema, type, unit, the whole proxy (oauth2-proxy needs the realm), wf, ts,
+schema, type, unit, model, the whole proxy (oauth2-proxy needs the realm), wf, ts,
 ts-api and lab, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
 `down --purge` also removes volumes, networks and the instances, but keeps
 `proxy/letsencrypt/acme.json` in the persist directory (`create` puts it back)

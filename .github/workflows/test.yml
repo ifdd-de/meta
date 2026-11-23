@@ -132,6 +132,8 @@ jobs:
         run: |
           (cd "$RUNNER_TEMP/fresh" && ifdd-meta compile installation.yaml && ifdd-meta create)
           # ui keeps ifddVersion in src/Env.js, which is instance-owned (skip
-          # list), so an update leaves the old version there.
+          # list), so an update leaves the old version there. model 26.11.6 adds
+          # three settings to dotenv.dist; update shows them, the operator adds
+          # them by hand (remove once OLD_REF is 26.11.6 or later).
           python tools/ci/compare_instances.py "$RUNNER_TEMP/old/work" "$RUNNER_TEMP/fresh/work" \
-            --known frontend/src/Env.js
+            --known frontend/src/Env.js --known model/.env

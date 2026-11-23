@@ -133,6 +133,7 @@ def derive(description: Description, values: dict) -> dict[str, str]:
         "ifdd_ts_be_url": url["rest"],
         "ifdd_wf_host": host("wf"),
         "ifdd_lab_host": host("lab"),
+        "ifdd_model_host": host("model"),
         # realm
         "ifdd_keycloak_realm": d.realm,
         "ifdd_keycloak_extra_realms": ", ".join(d.extra_realms),

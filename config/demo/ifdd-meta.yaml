@@ -15,7 +15,7 @@ templates:
     ct: v26.11.1
     ts: v26.11.1
     lab: v26.11.3
-    model: v26.11.1
+    model: v26.11.6
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 workdir: work
 persist: state

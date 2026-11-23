@@ -94,6 +94,13 @@ def test_service_blocks_local_external_hosts_and_refs(tmp_path):
     assert d.refs == {"keycloak": "v2"}
 
 
+def test_model_has_a_host_of_its_own(tmp_path):
+    text = DEV.replace("  ct: {}\n", "  ct: {}\n  model: {host: linkml.dev.cache.example.org}\n")
+    d = load(describe(tmp_path, text))
+    assert "model" in d.services
+    assert d.host("model") == "linkml.dev.cache.example.org"
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -106,6 +113,8 @@ def test_service_blocks_local_external_hosts_and_refs(tmp_path):
         (("  ts: {host: ts.dev.cache.example.org}\n", "  ts: {host: ts.x.org, external: true}\n"),
          "ts-api needs ts on the same server"),
         (("  ui: {host: ui.dev.cache.example.org}\n", "  ui: {}\n"), "no host for ui"),
+        # model is a web service with a host since 26.11.6
+        (("  ct: {}\n", "  ct: {}\n  model: {}\n"), "no host for model"),
         (("  ref: v1\n", "  ref: v1\n  refs: {be: v3}\n"), "put each ref into its block"),
         (("  ct: {}\n", "  ct: {}\n  git: {host: git.example.org, external: true}\n"),
          "takes only a host"),
