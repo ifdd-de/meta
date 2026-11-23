@@ -515,7 +515,8 @@ def keycloak_secrets(
         typer.echo(f"error: {error}", err=True)
         raise typer.Exit(1) from None
     sys.stdout.write("".join(f"{line}\n" for line in lines))
-    typer.echo(f"{len(lines)} client secrets of realm {realm or 'of the instance'}", err=True)
+    which = f"realm {realm}" if realm else "the realm of the instance"
+    typer.echo(f"{len(lines)} client secrets of {which}", err=True)
 
 
 @demo_app.command("load")

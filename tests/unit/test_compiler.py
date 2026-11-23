@@ -258,9 +258,9 @@ def test_external_services_give_urls_but_no_local_hosts(tmp_path):
     assert {"data.dev.cache.example.org"} <= internal
     assert not {"oidc.example.org", "schema.model.example.org"} & internal
     hosts_lines = set(result.files["hosts.txt"].splitlines())
-    assert "data.dev.cache.example.org" in hosts_lines
-    assert "oidc.example.org" not in hosts_lines
-    assert "https://oidc.example.org" in v["ifdd_proxy_csp_ui"].split()
+    assert {"data.dev.cache.example.org"} <= hosts_lines
+    assert hosts_lines.isdisjoint({"oidc.example.org"})
+    assert {"https://oidc.example.org"} <= set(v["ifdd_proxy_csp_ui"].split())
     settings_text = result.files["ifdd-meta.yaml"]
     assert "external: [keycloak, schema, type, unit]\n" in settings_text
     assert "keycloak_secrets: keycloak-secrets.env\n" in settings_text
