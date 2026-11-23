@@ -19,7 +19,7 @@ FOREIGN_STORE = "temperature.grid.example.ifdd.de"
 
 @pytest.fixture(scope="module")
 def ts(installation):
-    if not installation.has("ts-api", "keycloak", "type"):
+    if not (installation.has("ts-api") and installation.uses("keycloak", "type")):
         pytest.skip("needs ts-api, keycloak and type")
     return installation.variables["ifdd_ts_api_url"]
 

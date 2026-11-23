@@ -66,16 +66,18 @@ def test_public_names_with_lets_encrypt(tmp_path):
 
 def test_without_wf_there_is_no_login_gate(tmp_path):
     result = compiler.compile_description(
-        describe(tmp_path, "installation: x\nservices: [proxy, keycloak, be, ui]\n")
+        describe(
+            tmp_path, "installation: x\nservices: [proxy, keycloak, be, ui, schema, type, unit]\n"
+        )
     )
     assert result.values["ifdd_proxy_enable_oauth2_proxy"] == "n"
     # no host behind the gate; keycloak accepts an empty value since 26.11.2
     assert result.values["ifdd_keycloak_proxy_gate_hosts"] == ""
-    assert result.values["ifdd_proxy_internal_hosts"] == "id, rest, ui"
+    assert result.values["ifdd_proxy_internal_hosts"] == "id, rest, ui, schema, type, unit"
     lines = result.files["hosts.txt"].splitlines()
     assert (lines[0], lines[-2], lines[-1]) == (
         "# BEGIN ifdd-meta x",
-        "127.0.0.1 id rest ui",
+        "127.0.0.1 id rest ui schema type unit",
         "# END ifdd-meta x",
     )
     assert all(line.startswith("#") for line in lines[1:-2])
@@ -187,7 +189,7 @@ def test_warning_for_short_names_with_wf(tmp_path):
     assert compiler.compile_description(describe(tmp_path, "installation: x\n")).warnings
     with_suffix = "installation: x\nhosts:\n  suffix: ci.test\n"
     assert not compiler.compile_description(describe(tmp_path, with_suffix)).warnings
-    without_wf = "installation: x\nservices: [proxy, be]\n"
+    without_wf = "installation: x\nservices: [proxy, keycloak, be, schema]\n"
     assert not compiler.compile_description(describe(tmp_path, without_wf)).warnings
 
 
@@ -214,7 +216,9 @@ def test_public_names_with_own_certificates_give_dns_records(tmp_path):
 
 
 def test_lab_gets_its_client_network_and_host(tmp_path):
-    text = "installation: x\nhosts:\n  suffix: a.test\nservices: [proxy, keycloak, be, lab]\n"
+    text = (
+        "installation: x\nhosts:\n  suffix: a.test\nservices: [proxy, keycloak, be, schema, lab]\n"
+    )
     v = compiler.compile_description(describe(tmp_path, text)).values
     assert v["ifdd_keycloak_lab_client_id"] == "ifdd-lab"
     assert v["ifdd_proxy_extra_networks"] == v["ifdd_lab_network"] == "lab-net"
@@ -235,8 +239,28 @@ def test_without_lab_no_client_and_no_network(tmp_path):
 
 def test_a_renamed_lab_network_reaches_the_proxy(tmp_path):
     text = (
-        "installation: x\nservices: [proxy, keycloak, be, lab]\n"
+        "installation: x\nservices: [proxy, keycloak, be, schema, lab]\n"
         "overrides:\n  ifdd_lab_network: other-net\n"
     )
     v = compiler.compile_description(describe(tmp_path, text)).values
     assert v["ifdd_proxy_extra_networks"] == v["ifdd_lab_network"] == "other-net"
+
+
+def test_external_services_give_urls_but_no_local_hosts(tmp_path):
+    from test_description import DEV as dev_text
+
+    result = compiler.compile_description(describe(tmp_path, dev_text))
+    v = result.values
+    assert v["ifdd_oidc_realm"] == "https://oidc.example.org/realms/dev"
+    assert v["ifdd_be_url"] == "https://data.dev.cache.example.org"
+    assert v["ifdd_schema_url"] == "https://schema.model.example.org/v1"
+    internal = v["ifdd_proxy_internal_hosts"].split(", ")
+    assert "data.dev.cache.example.org" in internal
+    assert "oidc.example.org" not in internal and "schema.model.example.org" not in internal
+    assert "oidc.example.org" not in result.files["hosts.txt"]
+    assert "https://oidc.example.org" in v["ifdd_proxy_csp_ui"]
+    settings_text = result.files["ifdd-meta.yaml"]
+    assert "external: [keycloak, schema, type, unit]\n" in settings_text
+    assert "keycloak_secrets: keycloak-secrets.env\n" in settings_text
+    assert "    keycloak: v2\n" in settings_text
+    assert "services: [proxy, be, ui, ct, ts, ts-api]\n" in settings_text

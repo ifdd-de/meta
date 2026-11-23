@@ -118,9 +118,35 @@ def test_unknown_reference_is_reported(tmp_path):
     (tmp_path / "ifdd-meta.yaml").write_text(
         f"variables: vars.yaml\ntemplates:\n  source: {tmp_path / 'templates'}\n  ref: v9\n"
     )
+    report = check.run(load(cwd=tmp_path, environ={}))
+    # lab is not among the default services: a note, no error
+    assert len(report.findings) == len(SERVICES) - 1
+    assert report.findings[0].message.startswith("proxy@v9: git -C")
+    assert report.notes == ("template lab (not used) not found at v9: ifdd_lab_* unchecked",)
+
+
+def test_unused_template_without_the_reference_leaves_only_its_variables_unchecked(tmp_path):
+    make_templates(tmp_path / "templates", EXTRA)
+    subprocess.run([*GIT, "-C", str(tmp_path / "templates" / "lab"), "tag", "-d", "v1"],
+                   check=True, capture_output=True)  # fmt: skip
+    context = variables_for(EXTRA)
+    context["ifdd_nobody"] = "x"
+    (tmp_path / "vars.yaml").write_text(json.dumps({"default_context": context}))
+    (tmp_path / "ifdd-meta.yaml").write_text(
+        f"variables: vars.yaml\ntemplates:\n  source: {tmp_path / 'templates'}\n  ref: v1\n"
+    )
+    report = check.run(load(cwd=tmp_path, environ={}))
+    assert [f.message for f in report.findings] == [
+        "ifdd_nobody is defined by no template; cookiecutter would ignore it"
+    ]
+    assert report.notes == ("template lab (not used) not found at v1: ifdd_lab_* unchecked",)
+    # used (here: external), the missing template is an error again
+    (tmp_path / "ifdd-meta.yaml").write_text(
+        f"variables: vars.yaml\ntemplates:\n  source: {tmp_path / 'templates'}\n  ref: v1\n"
+        "external: [lab]\n"
+    )
     findings = check.run(load(cwd=tmp_path, environ={})).findings
-    assert len(findings) == len(SERVICES)
-    assert findings[0].message.startswith("proxy@v9: git -C")
+    assert findings[0].message.startswith("lab@v1: git -C")
 
 
 def test_missing_variables_file(tmp_path):

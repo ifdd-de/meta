@@ -2,6 +2,24 @@
 
 The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
+## [Unreleased]
+
+- Several servers: `services` may be a mapping with one block per service
+  (`host:`, `external: true`, `ref:`); the list form stays valid. External
+  services get host names and URLs but no instance, alias, DNS record or CA
+  copy. `compile` stops when a local service lacks a dependency.
+- `ca_certs` in the description: further CA certificates, copied as
+  `certs/extra-<name>.crt`; ct gets one bundle file `certs/ca-bundle.crt`.
+- `ifdd-meta keycloak secrets --realm R` prints the client secrets of a realm
+  for a server with an external Keycloak; `create` there reads them from the
+  file of the new setting `keycloak_secrets` (mode 0600).
+- `config check` only notes a missing template that the description does not
+  use.
+- Integration tests trust the local CA and the extra CAs, and take the client
+  secrets from that file when Keycloak is external.
+- CI: a second installation on the same runner uses Keycloak, schema, type and
+  unit of the first one.
+
 ## [26.11.5] - 2026-11-23
 
 - `docs/demo-server.md`: the cron script sets `PATH` to `~/.local/bin` itself,

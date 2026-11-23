@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -121,12 +122,15 @@ def config_check(ctx: typer.Context) -> None:
     settings = _settings(ctx)
     typer.echo(f"variables file: {settings['variables']}")
     report = check.run(settings)
+    for note in report.notes:
+        typer.echo(f"note: {note}")
     for finding in report.findings:
         typer.echo(f"error: {finding.message}", err=True)
     if report.findings:
         typer.echo(f"config check: {len(report.findings)} error(s)", err=True)
         raise typer.Exit(1)
-    refs = sorted({settings.ref(service) for service in SERVICES})
+    used = [s for s in SERVICES if s in settings["services"] or s in settings["external"]]
+    refs = sorted({settings.ref(service) for service in used})
     typer.echo(
         f"config check: ok ({report.variables} variables, {report.templates} templates "
         f"at {', '.join(refs)})"
@@ -479,6 +483,39 @@ def keycloak_add_user(
     for created_owner, created_role in admin.created_roles:
         typer.echo(f"created role {created_role} of {created_owner}")
     typer.echo(f"created user {username}; password in {password_file}")
+
+
+def _stdout_is_terminal() -> bool:
+    return sys.stdout.isatty()
+
+
+@keycloak_app.command("secrets")
+def keycloak_secrets(
+    ctx: typer.Context,
+    realm: Annotated[
+        str | None,
+        typer.Option(
+            help="Realm whose client secrets to write (default: the realm of the instance)."
+        ),
+    ] = None,
+) -> None:
+    """Write the client secrets of a realm to stdout, for the server that uses the realm.
+
+    One line VARIABLE=value per client the services and tests take (never the
+    user admin). Pipe it to the other server, e.g. over ssh into the file of
+    its setting keycloak_secrets (mode 0600); stdout must not be a terminal.
+    """
+    settings = _settings(ctx)
+    if _stdout_is_terminal():
+        typer.echo("error: stdout is a terminal; pipe the secrets into a file or ssh", err=True)
+        raise typer.Exit(1)
+    try:
+        lines = keycloak.export_secrets(settings, realm)
+    except (keycloak.KeycloakError, OSError) as error:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1) from None
+    sys.stdout.write("".join(f"{line}\n" for line in lines))
+    typer.echo(f"{len(lines)} client secrets of realm {realm or 'of the instance'}", err=True)
 
 
 @demo_app.command("load")

@@ -21,8 +21,10 @@ import yaml
 
 from . import copysecret, gitserver
 from .catalogue import (
+    CA_BUNDLE,
     CA_FILE_SETTINGS,
     CA_USERS,
+    EXTRA_CA_PREFIX,
     NO_ROOT,
     PERSIST,
     SECRET_COPIES,
@@ -131,6 +133,7 @@ def create(
 
     _copy_wheels(settings, state, services, run)
     _certificates(settings, state, services, run)
+    _extra_ca(settings, state, services, run)
     _secrets(settings, state, run)
     if settings["wf_git"] == "local":
         if "wf" in services:
@@ -277,11 +280,59 @@ def _system_trust(settings: Settings, state, run: Run) -> None:
             run.overview(f"{service}/{path}: {variable} emptied (Let's Encrypt: system trust)")
 
 
+def _extra_ca(settings: Settings, state, services, run: Run) -> None:
+    """The setting ca_certs into certs/ of every CA user; for ct also one bundle."""
+    certs = settings["ca_certs"]
+    if not certs:
+        return
+    for cert in certs:
+        if not cert.is_file():
+            raise CreateError(f"ca_certs: file not found: {cert}")
+    workdir: Path = settings["workdir"]
+    local = workdir / state["proxy"] / "certs" / "ca.crt" if "proxy" in state else None
+    for service in CA_USERS:
+        if service not in services or service not in state:
+            continue
+        target = workdir / state[service] / "certs"
+        target.mkdir(exist_ok=True)
+        for cert in certs:
+            shutil.copy2(cert, target / f"{EXTRA_CA_PREFIX}{cert.stem}.crt")
+        run.overview(f"CA certificates ({len(certs)}) -> {service}/certs/")
+    for service, path, variable in CA_FILE_SETTINGS:
+        if service not in services or service not in state or settings["tls"] == "letsencrypt":
+            continue  # with Let's Encrypt ct keeps the system trust store
+        parts = [local] if settings["tls"] == "local-ca" and local and local.is_file() else []
+        bundle = workdir / state[service] / "certs" / CA_BUNDLE
+        bundle.write_text(
+            "".join(p.read_text(encoding="utf-8").rstrip("\n") + "\n" for p in [*parts, *certs]),
+            encoding="utf-8",
+        )
+        copysecret.set_env(workdir / state[service] / path, variable, f"/certs/{CA_BUNDLE}")
+        run.overview(f"{service}/{path}: {variable}=/certs/{CA_BUNDLE}")
+
+
+def _keycloak_source(settings: Settings, state) -> Path | None:
+    """Where the client secrets come from: the own keycloak/.env or the setting keycloak_secrets."""
+    if "keycloak" in state:
+        return settings["workdir"] / state["keycloak"] / ".env"
+    if "keycloak" not in settings["external"]:
+        return None
+    source: Path = settings["keycloak_secrets"]
+    if not source.is_file():
+        raise CreateError(
+            f"keycloak_secrets: {source} missing; write it with 'ifdd-meta keycloak secrets "
+            "--realm <realm>' on the server of Keycloak (mode 0600)"
+        )
+    if source.stat().st_mode & 0o077:
+        raise CreateError(f"keycloak_secrets: {source} must be readable by its owner only (0600)")
+    return source
+
+
 def _secrets(settings: Settings, state, run: Run) -> None:
-    if "keycloak" not in state:
+    source = _keycloak_source(settings, state)
+    if source is None:
         return
     workdir: Path = settings["workdir"]
-    source = workdir / state["keycloak"] / ".env"
     for service, variable, kind, path, name in SECRET_COPIES:
         if service not in state:
             continue

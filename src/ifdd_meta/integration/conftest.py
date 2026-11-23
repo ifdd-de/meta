@@ -39,10 +39,17 @@ class Installation:
     settings: Settings
     variables: dict
     paths: dict[str, Path]  # service -> instance directory
-    ca_file: Path | None
+    ca_file: Path | None  # the local CA (browser tests)
+    ca_files: tuple[Path, ...] = ()  # everything the host trusts: local CA and ca_certs
 
     def has(self, *services: str) -> bool:
+        """The services run here (instances of this installation)."""
         return all(service in self.paths for service in services)
+
+    def uses(self, *services: str) -> bool:
+        """The services are reachable: here or external (setting external)."""
+        external = self.settings["external"]
+        return all(service in self.paths or service in external for service in services)
 
     def env(self, service: str) -> dict[str, str]:
         return envfile.read(self.paths[service] / ".env")
@@ -89,7 +96,11 @@ def installation() -> Installation:
     paths = {name: settings["workdir"] / directory for name, directory in state.items()}
     ca = paths["proxy"] / "certs" / "ca.crt" if "proxy" in paths else None
     return Installation(
-        settings, variables["default_context"], paths, ca if ca and ca.is_file() else None
+        settings,
+        variables["default_context"],
+        paths,
+        ca if ca and ca.is_file() else None,
+        tuple(keycloak.trust_files(settings, state)),
     )
 
 
@@ -102,7 +113,7 @@ def writes(installation):
 
 @pytest.fixture(scope="session")
 def ssl_context(installation):
-    return keycloak.ssl_context(installation.ca_file)
+    return keycloak.ssl_context(installation.ca_files)
 
 
 @pytest.fixture(scope="session")
@@ -112,10 +123,17 @@ def http(ssl_context):
 
 @pytest.fixture(scope="session")
 def tokens(installation, ssl_context):
-    """Access token of a client of keycloak/.env: tokens("ct"|"api"|"ingest") (cached)."""
-    if not installation.has("keycloak"):
+    """Access token of a client: tokens("ct"|"api"|"ingest") (cached).
+
+    The secrets come from keycloak/.env, or with an external Keycloak from the
+    file of the setting keycloak_secrets.
+    """
+    if installation.has("keycloak"):
+        env = installation.env("keycloak")
+    elif "keycloak" in installation.settings["external"]:
+        env = envfile.read(installation.settings["keycloak_secrets"])
+    else:
         pytest.skip("no keycloak instance")
-    env = installation.env("keycloak")
     variables = installation.variables
     cache: dict[str, str] = {}
 
@@ -138,7 +156,7 @@ def admin(installation, writes) -> keycloak.Admin:
     return keycloak.Admin.from_instance(
         installation.paths["keycloak"],
         installation.variables["ifdd_keycloak_realm"],
-        installation.ca_file,
+        installation.ca_files,
     )
 
 

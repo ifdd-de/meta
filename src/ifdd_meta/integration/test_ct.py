@@ -14,7 +14,7 @@ GRID_DOCUMENTS = 20 + 8 + 5 + 4
 
 @pytest.fixture(scope="module")
 def ct(installation, writes):
-    if not installation.has("ct", "be", "keycloak", "schema"):
+    if not (installation.has("ct", "be") and installation.uses("keycloak", "schema")):
         pytest.skip("needs ct, be, keycloak and schema")
     return installation
 
@@ -35,7 +35,7 @@ def test_energy_grid(ct, http, tokens):
 
 
 def test_time_series(ct, http, tokens):
-    if not ct.has("ts-api", "type"):
+    if not (ct.has("ts-api") and ct.uses("type")):
         pytest.skip("needs ts-api and type")
     output = ct.run("ct", "./adm_02_run.sh", "-f", SERIES, stderr=True)
     url = f"{ct.variables['ifdd_ts_api_url']}/stores"

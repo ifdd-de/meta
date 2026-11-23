@@ -271,3 +271,69 @@ def test_a_secret_the_gitignore_misses_is_not_committed(tmp_path):
 )
 def test_secret_like_paths(path, secret):
     assert create.secret_like(path) is secret
+
+
+def extra_certs(tmp_path):
+    (tmp_path / "corp").mkdir()
+    for name in ("root", "proxy-ca"):
+        (tmp_path / "corp" / f"{name}.crt").write_text(f"-----{name}-----\n")
+    return "ca_certs: [corp/root.crt, corp/proxy-ca.crt]\n"
+
+
+def test_ca_certs_go_to_every_ca_user_and_into_one_bundle_for_ct(tmp_path, templates):
+    settings = settings_for(
+        tmp_path, templates, "services: [proxy, be, ct]\n" + extra_certs(tmp_path)
+    )
+    _, lines = run_create(settings)
+    work = settings["workdir"]
+    for service in ("be", "ct"):
+        certs = work / ("backend" if service == "be" else service) / "certs"
+        assert (certs / "extra-root.crt").read_text() == "-----root-----\n"
+        assert (certs / "extra-proxy-ca.crt").is_file()
+    bundle = (work / "ct" / "certs" / "ca-bundle.crt").read_text()
+    local = (work / "proxy" / "certs" / "ca.crt").read_text()
+    assert bundle.startswith(local.rstrip("\n") + "\n")
+    assert bundle.endswith("-----root-----\n-----proxy-ca-----\n")
+    assert "IFDD_CT_CA_BUNDLE=/certs/ca-bundle.crt\n" in (work / "ct" / ".env").read_text()
+    assert any("CA certificates (2) -> be/certs/" in line for line in lines)
+
+
+def test_ca_certs_with_lets_encrypt_keep_the_system_trust_of_ct(tmp_path, templates):
+    text = "tls: letsencrypt\nservices: [proxy, ct]\n" + extra_certs(tmp_path)
+    settings = settings_for(tmp_path, templates, text)
+    run_create(settings)
+    ct = settings["workdir"] / "ct"
+    assert (ct / "certs" / "extra-root.crt").is_file()  # for the build behind a TLS proxy
+    assert not (ct / "certs" / "ca-bundle.crt").exists()
+    assert "IFDD_CT_CA_BUNDLE=\n" in (ct / ".env").read_text()
+
+
+def test_secrets_of_an_external_keycloak_come_from_the_file(tmp_path, templates):
+    secrets = tmp_path / "keycloak-secrets.env"
+    secrets.write_text(
+        "IFDD_KEYCLOAK_CT_CLIENT_SECRET=from-prod\nIFDD_KEYCLOAK_PROXY_CLIENT_SECRET=p\n"
+    )
+    secrets.chmod(0o600)
+    settings = settings_for(tmp_path, templates, "services: [proxy, ct]\nexternal: [keycloak]\n")
+    _, lines = run_create(settings)
+    assert (
+        "IFDD_CT_OIDC_CLIENT_SECRET=from-prod\n"
+        in (settings["workdir"] / "ct" / ".env").read_text()
+    )
+    assert any("Secret IFDD_KEYCLOAK_CT_CLIENT_SECRET -> ct/.env" in line for line in lines)
+
+
+def test_secrets_file_of_an_external_keycloak_is_checked(tmp_path, templates):
+    settings = settings_for(tmp_path, templates, "services: [proxy, ct]\nexternal: [keycloak]\n")
+    with pytest.raises(create.CreateError, match="ifdd-meta keycloak secrets"):
+        run_create(settings)
+    secrets = tmp_path / "keycloak-secrets.env"
+    secrets.write_text("IFDD_KEYCLOAK_CT_CLIENT_SECRET=x\n")
+    secrets.chmod(0o644)
+    other = tmp_path / "second"
+    other.mkdir()
+    (other / "keycloak-secrets.env").write_text("IFDD_KEYCLOAK_CT_CLIENT_SECRET=x\n")
+    (other / "keycloak-secrets.env").chmod(0o644)
+    settings = settings_for(other, templates, "services: [proxy, ct]\nexternal: [keycloak]\n")
+    with pytest.raises(create.CreateError, match="owner only"):
+        run_create(settings)

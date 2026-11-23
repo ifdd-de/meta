@@ -18,7 +18,7 @@ VALID_FROM = "2026-01-01T00:00:00Z"
 
 @pytest.fixture(scope="module")
 def be(installation):
-    if not installation.has("be", "keycloak", "schema"):
+    if not (installation.has("be") and installation.uses("keycloak", "schema")):
         pytest.skip("needs be, keycloak and schema")
     return installation.variables["ifdd_be_url"]
 
