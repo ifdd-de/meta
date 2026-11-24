@@ -122,3 +122,16 @@ def test_cli_reports_the_status_file_on_failure(tmp_path, monkeypatch):
     assert result.exit_code == 1
     assert "error: create failed" in result.output
     assert f"status: {tmp_path / 'state' / rebuild.STATUS_FILE}" in result.output
+
+
+def test_a_protected_installation_is_never_rebuilt(tmp_path):
+    (tmp_path / "ifdd-meta.yaml").write_text(
+        "variables: vars.yaml\ninstallation: prod\nprotected: true\n"
+    )
+    settings = load(cwd=tmp_path, environ={})
+    calls = []
+    run = Run(tmp_path / "logs", "rebuild", lambda line: None)
+    with pytest.raises(services.CreateError, match="installation prod is protected"):
+        rebuild.rebuild(settings, run, ["down", "create"], steps=recording_steps(calls))
+    assert calls == []
+    assert not rebuild.status_path(settings).exists()  # not even a status of a run

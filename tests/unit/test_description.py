@@ -273,3 +273,10 @@ def test_realm_files_are_not_checked_without_a_local_keycloak(tmp_path):
     text = DEV.replace("installation: dev\n", "installation: dev\nextra_realms: [x]\n")
     assert "extra_realms: [x]" in text
     assert load(describe(tmp_path, text)).files == ()
+
+
+def test_protected_is_true_or_false(tmp_path):
+    assert load(describe(tmp_path, "installation: x\nprotected: true\n")).protected is True
+    assert load(describe(tmp_path, "installation: x\n")).protected is False
+    with pytest.raises(DescriptionError, match="protected must be true or false"):
+        load(describe(tmp_path, "installation: x\nprotected: 'yes'\n"))

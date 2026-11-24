@@ -44,6 +44,25 @@ The version scheme follows the other IFDD repositories: `YY.MM.N`.
   another server.
 - Upgrade: a description with `extra_realms` and a local Keycloak needs a values
   file per further realm in `files:`; `compile` stops without them.
+- Every command runs with umask `0022`, whatever the umask of the shell (the
+  stages use `0007`): rendered files stay readable for the containers that run
+  as other users (Keycloak, nginx, Grafana). Copies of `files:` get `0644`
+  (`0600` for secret-like targets), copies of `ca_certs` and the CA bundles
+  `0644`.
+- `protected: true` in the description: `down --purge` and `rebuild` refuse
+  (a stage is only updated).
+- `down --purge` keeps the database dumps `keycloak/backups/` in the persist
+  directory (added to, never deleted, mode 0700); `create` puts them back.
+- `keycloak add-user --realm R --grafana-role admin|editor|viewer`: a user of
+  another realm of the same Keycloak, with the realm role behind a Grafana role.
+- An explicit host of the proxy (the Traefik dashboard) gets a line in
+  `hosts.txt`.
+- Docs: `docs/multi-server.md` (stages prod, int, dev and a tools vServer), with
+  the stage descriptions in `docs/examples/stages/` and the script
+  `docs/examples/tools-vserver.sh` (setup, update, status over ssh without agent
+  forwarding, `--dry-run`); both are covered by unit tests, the script also by
+  shellcheck.
+- CI: the integration run runs under umask `0007` (`tools/ci/umask0007.sh`).
 - CI: the integration run has a further realm `dev` from a values file (through
   `files:`) and checks that Keycloak serves it; a further CA in `ca_certs` puts
   the login gate of wf onto the bundle (oauth2-proxy starts only if it reads

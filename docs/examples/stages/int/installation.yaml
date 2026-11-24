@@ -1,0 +1,43 @@
+# Description of the stage int for ifdd-meta ("ifdd-meta compile" writes the
+# files next to it). Your own copy is private: keep it in installations/ on the
+# tools vServer and on the server of the stage, never in a public repository.
+# All names are invented examples below example.org: replace them with yours
+# (example of docs/multi-server.md).
+#
+# The integration stage. Keycloak (realm ifdd-int) and the static
+# services run on prod; the client secrets come from 'ifdd-meta keycloak secrets
+# --realm ifdd-int' on prod, piped into keycloak-secrets.env next to this file.
+installation: int
+protected: true                  # a stage: no down --purge, no rebuild; only update
+realm: ifdd-int
+tls: own                         # certificates of the company CA, put into proxy/certs/ by hand
+contact: ifdd-admin@example.org
+context_root: assets.example.org
+wf_git: external                 # Git server of the company; token: IFDD_META_WF_GIT_TOKEN in .env
+# The company CA, its sub CA and the CA of the TLS-inspecting web proxy: every
+# service that trusts CAs gets them, ct and oauth2-proxy as one bundle.
+ca_certs:
+  - ../certs/company-root-ca.crt
+  - ../certs/company-sub-ca.crt
+  - ../certs/web-proxy-ca.crt
+overrides:
+  # wf: the flows of this stage in a repository of their own
+  ifdd_wf_git_url: "https://git.example.org/ifdd/flows-int.git"
+  ifdd_wf_git_username: "ifdd-flows-int"
+  ifdd_wf_git_branch: "main"
+templates:
+  ref: v26.11.2                  # every template without a ref of its own below
+services:
+  proxy: {host: proxy.int.cache.example.org, ref: v26.11.3}   # Traefik dashboard
+  be: {host: data.int.cache.example.org}
+  ui: {host: ui.int.cache.example.org}
+  ts: {host: ts.int.cache.example.org, ref: v26.11.1}
+  ts-api: {}                                  # below the host of ts
+  ct: {ref: v26.11.1}                         # no host of its own
+  wf: {host: wf.int.cache.example.org}
+  lab: {host: lab.int.cache.example.org, ref: v26.11.3}
+  keycloak: {host: oidc.example.org, ref: v26.11.3, external: true}
+  schema: {host: schema.model.example.org, ref: v26.11.1, external: true}
+  type: {host: type.model.example.org, ref: v26.11.1, external: true}
+  unit: {host: unit.model.example.org, ref: v26.11.1, external: true}
+  model: {host: linkml.model.example.org, ref: v26.11.6, external: true}

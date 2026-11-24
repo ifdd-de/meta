@@ -314,3 +314,48 @@ def test_oauth2_proxy_trusts_the_bundle_with_ca_certs(tmp_path, tls, ca_certs, e
     text += "ca_certs: [corp.crt]\n" if ca_certs else ""
     values = compiler.compile_description(describe(tmp_path, text)).values
     assert values["ifdd_proxy_oauth2_proxy_ca_file"] == expected
+
+
+DEV_BLOCKS = """installation: dev
+tls: {tls}
+services:
+  proxy: {{host: proxy.dev.cache.example.org}}
+  be: {{host: data.dev.cache.example.org}}
+  ui: {{host: ui.dev.cache.example.org}}
+  keycloak: {{host: oidc.example.org, external: true}}
+  schema: {{host: schema.model.example.org, external: true}}
+  type: {{host: type.model.example.org, external: true}}
+  unit: {{host: unit.model.example.org, external: true}}
+"""
+
+
+@pytest.mark.parametrize("tls", ["own", "letsencrypt"])
+def test_an_explicit_proxy_host_gets_a_dns_record(tmp_path, tls):
+    result = compiler.compile_description(describe(tmp_path, DEV_BLOCKS.format(tls=tls)))
+    assert result.files["hosts.txt"].splitlines()[2:] == [
+        "data.dev.cache.example.org",
+        "ui.dev.cache.example.org",
+        "proxy.dev.cache.example.org",
+    ]
+    assert result.values["ifdd_proxy_host"] == "proxy.dev.cache.example.org"
+    # no network alias: no container calls the dashboard
+    assert "proxy.dev" not in result.values["ifdd_proxy_internal_hosts"]
+
+
+def test_an_explicit_proxy_host_is_in_the_etc_hosts_block(tmp_path):
+    result = compiler.compile_description(describe(tmp_path, DEV_BLOCKS.format(tls="local-ca")))
+    names = result.files["hosts.txt"].splitlines()[-2].split()
+    assert names == [
+        "127.0.0.1",
+        "data.dev.cache.example.org",
+        "ui.dev.cache.example.org",
+        "proxy.dev.cache.example.org",
+    ]
+
+
+def test_protected_reaches_the_settings(tmp_path):
+    result = compiler.compile_description(describe(tmp_path, "installation: x\nprotected: true\n"))
+    compiler.write(result, tmp_path)
+    assert settings.load(settings_file=tmp_path / "ifdd-meta.yaml", environ={})["protected"]
+    plain = compiler.compile_description(describe(tmp_path, "installation: x\n"))
+    assert "protected" not in plain.files["ifdd-meta.yaml"]

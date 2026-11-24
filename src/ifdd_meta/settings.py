@@ -86,6 +86,8 @@ FIELDS = (
     Field("ca_certs", "paths", []),
     #: private files: target "<service>/<path>" in the instances -> source file
     Field("files", "mapping", {}),
+    #: a stage: down --purge and rebuild refuse (description: protected: true)
+    Field("protected", "bool", False),
     #: client secrets of an external Keycloak (from 'ifdd-meta keycloak secrets')
     Field("keycloak_secrets", "path", "keycloak-secrets.env"),
 )
@@ -230,6 +232,15 @@ def _convert(field: Field, raw: Any, relative_to: Path) -> Any:
         if raw not in field.choices:
             raise SettingsError(f"expected one of {', '.join(field.choices)}, got {raw!r}")
         return raw
+    if field.kind == "bool":
+        if isinstance(raw, bool):
+            return raw
+        text = str(raw).strip().lower()
+        if text in ("true", "yes", "1"):
+            return True
+        if text in ("false", "no", "0"):
+            return False
+        raise SettingsError(f"expected true or false, got {raw!r}")
     if field.kind == "int":
         try:
             number = int(raw)

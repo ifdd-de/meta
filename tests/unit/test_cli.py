@@ -1,3 +1,6 @@
+import os
+
+import pytest
 from typer.testing import CliRunner
 
 from ifdd_meta.cli import app
@@ -70,6 +73,7 @@ def test_test_command_needs_a_settings_file(tmp_path, monkeypatch):
 
 class FakeAdmin:
     def __init__(self):
+        self.realms = []  # the realm of each from_settings
         self.added = []
         self.deleted = []
         self.created_roles = [("ifdd", "ops.example.ifdd.de")]
@@ -99,7 +103,12 @@ def add_client(tmp_path, monkeypatch, *args, command="add-client"):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
     fake = FakeAdmin()
-    monkeypatch.setattr(keycloak.Admin, "from_settings", classmethod(lambda cls, s: fake))
+
+    def from_settings(cls, settings, realm=None):
+        fake.realms.append(realm)
+        return fake
+
+    monkeypatch.setattr(keycloak.Admin, "from_settings", classmethod(from_settings))
     return fake, runner.invoke(app, ["keycloak", command, *args])
 
 
@@ -210,3 +219,63 @@ def test_update_needs_instances(tmp_path, monkeypatch):
         result = runner.invoke(app, argv)
         assert result.exit_code == 1
         assert "no instances" in result.output
+
+
+def variables_file(tmp_path):
+    """The variables of an installation with a further realm, as compile writes them."""
+    (tmp_path / "vars.yaml").write_text(
+        "default_context:\n  ifdd_keycloak_realm: ifdd-prod\n"
+        "  ifdd_keycloak_extra_realms: ifdd-dev, ifdd-int\n"
+        "  ifdd_ts_role_admin: admin\n  ifdd_ts_role_editor: readwrite\n"
+        "  ifdd_ts_role_viewer: readonly\n"
+    )
+    (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\n")
+
+
+@pytest.mark.parametrize(("grafana", "role"), [("admin", "admin"), ("editor", "readwrite"),
+                                               ("viewer", "readonly")])  # fmt: skip
+def test_add_user_in_a_further_realm_with_a_grafana_role(tmp_path, monkeypatch, grafana, role):
+    variables_file(tmp_path)
+    fake, result = add_client(
+        tmp_path, monkeypatch, "editor1", "--password-file", "e.password",
+        "--realm", "ifdd-dev", "--grafana-role", grafana, "--realm-role", "extra",
+        command="add-user",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert fake.realms == ["ifdd-dev"]
+    [(_, _, options)] = fake.added
+    assert options["realm_roles"] == ["extra", role]
+    assert "created user editor1 in realm ifdd-dev" in result.output
+
+
+def test_add_user_without_realm_and_grafana_role_keeps_the_defaults(tmp_path, monkeypatch):
+    fake, result = add_client(
+        tmp_path, monkeypatch, "u", "--password-file", "u.password", command="add-user"
+    )
+    assert result.exit_code == 0, result.output
+    assert fake.realms == [None]
+    assert fake.added[0][2]["realm_roles"] == []
+
+
+def test_add_user_refuses_an_unknown_grafana_role_before_anything(tmp_path, monkeypatch):
+    variables_file(tmp_path)
+    fake, result = add_client(
+        tmp_path, monkeypatch, "u", "--password-file", "u.password", "--grafana-role", "owner",
+        command="add-user",
+    )  # fmt: skip
+    assert result.exit_code == 1
+    assert "Grafana role must be one of admin, editor, viewer" in result.output
+    assert fake.realms == [] and fake.added == []
+    assert not (tmp_path / "u.password").exists()
+
+
+def test_every_command_runs_with_umask_022(tmp_path, monkeypatch):
+    """The stages run with umask 0007; ifdd-meta itself uses 0022 (cli callback)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("IFDD_META_SETTINGS", raising=False)
+    before = os.umask(0o007)
+    try:
+        assert runner.invoke(app, ["config", "show"]).exit_code == 0
+        assert os.umask(0o007) == 0o022
+    finally:
+        os.umask(before)

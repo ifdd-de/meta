@@ -65,3 +65,45 @@ def test_cli_writes_to_a_pipe_only(settings, monkeypatch, tmp_path):
     result = CliRunner().invoke(app, ["keycloak", "secrets"])
     assert result.exit_code == 1
     assert "ct-main" not in result.stdout
+
+
+# add-user --realm: the admin API of another realm of the same Keycloak
+
+
+def test_admin_of_a_further_realm(settings, monkeypatch):
+    calls = []
+
+    def from_instance(cls, keycloak_dir, realm, ca_file):
+        calls.append((keycloak_dir.name, realm))
+        return "admin"
+
+    monkeypatch.setattr(keycloak.Admin, "from_instance", classmethod(from_instance))
+    assert keycloak.Admin.from_settings(settings) == "admin"
+    assert keycloak.Admin.from_settings(settings, "stage-b") == "admin"
+    assert keycloak.Admin.from_settings(settings, "realm-a") == "admin"
+    assert calls == [("keycloak", "realm-a"), ("keycloak", "stage-b"), ("keycloak", "realm-a")]
+    with pytest.raises(
+        keycloak.KeycloakError, match=r"'stage-c' is not a realm .*realm-a, stage-b"
+    ):
+        keycloak.Admin.from_settings(settings, "stage-c")
+
+
+def test_realm_of_gives_the_secret_suffix(settings):
+    assert keycloak.realm_of(settings, None) == ("realm-a", "")
+    assert keycloak.realm_of(settings, "stage-b") == ("stage-b", "STAGE_B")
+
+
+def test_grafana_roles_come_from_the_variables(tmp_path):
+    (tmp_path / "vars.yaml").write_text(
+        "default_context:\n  ifdd_ts_role_admin: boss\n  ifdd_ts_role_editor: writer\n"
+        "  ifdd_ts_role_viewer: reader\n"
+    )
+    (tmp_path / "ifdd-meta.yaml").write_text("variables: vars.yaml\n")
+    settings = load(cwd=tmp_path, environ={})
+    assert [keycloak.grafana_role(settings, r) for r in ("admin", "editor", "viewer")] == [
+        "boss",
+        "writer",
+        "reader",
+    ]
+    with pytest.raises(keycloak.KeycloakError, match="one of admin, editor, viewer"):
+        keycloak.grafana_role(settings, "Admin")

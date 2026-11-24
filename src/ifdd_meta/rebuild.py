@@ -110,6 +110,7 @@ def rebuild(
     ``tests`` runs the integration tests and returns pytest's exit code; it is
     needed when ``names`` contains ``test``.
     """
+    services.refuse_if_protected(settings, "rebuild")
     status = status_path(settings)
     started = [f"started: {_now()}", f"log: {run.log}", f"steps: {' '.join(names)}"]
     _write_status(status, [*started, "result: running"])

@@ -20,6 +20,7 @@ _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _TOP = {
     "installation", "hosts", "tls", "contact", "realm", "extra_realms",
     "context_root", "services", "templates", "overrides", "wf_git", "ca_certs", "files",
+    "protected",
 }  # fmt: skip
 _BLOCK_KEYS = {"host", "external", "ref"}
 #: Targets of files: that keycloak/realm/build_realm.py turns into realm import files.
@@ -57,6 +58,8 @@ class Description:
     ca_certs: tuple[str, ...] = ()
     #: private files: (target "<service>/<path>", source relative to the description)
     files: tuple[tuple[str, str], ...] = ()
+    #: a stage: down --purge and rebuild refuse
+    protected: bool = False
 
     def host(self, label: str) -> str:
         if label in self.names:
@@ -147,6 +150,9 @@ def load(path: Path) -> Description:
             f"{path}: wf_git must be one of {', '.join(WF_GIT_MODES)}: {wf_git!r}"
         )
 
+    protected = data.get("protected", False)
+    if not isinstance(protected, bool):
+        raise DescriptionError(f"{path}: protected must be true or false")
     files = _files(path, data.get("files"), services)
     _check_realm_files(path, files, services, realm, extra)
 
@@ -182,6 +188,7 @@ def load(path: Path) -> Description:
         external=tuple(s for s in SERVICES if s in external),
         ca_certs=tuple(ca_certs),
         files=tuple(files),
+        protected=protected,
     )
 
 

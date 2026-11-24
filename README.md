@@ -15,6 +15,7 @@ operator. The design, with everything planned, is in
 
 A test installation on a Mac (Colima): [`docs/local-macos-colima.md`](docs/local-macos-colima.md).
 The public demo server: [`docs/demo-server.md`](docs/demo-server.md).
+Several servers (stages prod, int, dev and a tools vServer): [`docs/multi-server.md`](docs/multi-server.md).
 
 ## Requirements
 
@@ -137,6 +138,12 @@ hand, run
 `python3 realm/build_realm.py --values realm/values_<x>.toml`, commit, restart
 Keycloak.
 
+`protected: true` marks a stage that is only updated: `down --purge` and
+`rebuild` refuse. Every ifdd-meta command runs with umask `0022`, so the
+containers that run as other users read the instances also when the operating
+user has umask `0007`; secrets get `0600` explicitly. The proxy block may name
+the host of the Traefik dashboard; it then gets a line in `hosts.txt`.
+
 `config check` compares the variables file with the `cookiecutter.json` of
 every template at the chosen reference: a missing variable, one that no template
 defines, a version, a secret-like name, a malformed choice or Jinja that refers
@@ -230,8 +237,9 @@ starts Traefik alone, then keycloak, be, ui,
 schema, type, unit, model, the whole proxy (oauth2-proxy needs the realm), wf, ts,
 ts-api and lab, each with `docker compose up --wait` or the instance's `adm_02_run.sh`.
 `down --purge` also removes volumes, networks and the instances, but keeps
-`proxy/letsencrypt/acme.json` in the persist directory (`create` puts it back)
-and the Docker volume `<lab>_dind-data` with the homes of the lab users (a new
+`proxy/letsencrypt/acme.json` and the database dumps `keycloak/backups/` in the
+persist directory (`create` puts them back; the dumps are added to, never
+deleted) and the Docker volume `<lab>_dind-data` with the homes of the lab users (a new
 lab instance of the same name finds it again; `docker volume rm` removes it).
 
 lab (JupyterHub, `ifdd-de/lab`) is optional: an installation gets it only when
@@ -339,6 +347,9 @@ uv run ifdd-meta --settings path/to/ifdd-meta.yaml keycloak add-user jane \
 
 The password is generated and written into a new file with mode 0600; it is
 never shown. `--temporary` makes Keycloak ask for a new one at the first login.
+`--realm` adds the user to another realm of the same Keycloak (one of
+`extra_realms`, for instance that of a stage); `--grafana-role admin|editor|viewer`
+grants the realm role that ts maps to that Grafana role.
 
 ## Configuration
 

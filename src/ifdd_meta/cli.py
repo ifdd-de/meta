@@ -81,6 +81,10 @@ def options(
         typer.Option("--version", callback=_version, is_eager=True, help="Show the version."),
     ] = False,
 ) -> None:
+    # Files of the instances readable for the containers that run as another
+    # user (Keycloak, nginx, Grafana), whatever the umask of the operator is
+    # (0007 on the stages). Secrets get their mode explicitly (0600).
+    os.umask(create.UMASK)
     ctx.obj = {
         "settings_file": settings,
         "cli": {
@@ -460,6 +464,16 @@ def keycloak_add_user(
     temporary: Annotated[
         bool, typer.Option(help="The user has to change the password at the first login.")
     ] = False,
+    realm: Annotated[
+        str | None,
+        typer.Option(help="Realm of the user (default: the realm of the instance)."),
+    ] = None,
+    grafana_role: Annotated[
+        str | None,
+        typer.Option(
+            help="Grafana role: admin, editor or viewer (its realm role of the installation)."
+        ),
+    ] = None,
 ) -> None:
     """Add a user with a generated password, groups, realm and client roles."""
     settings = _settings(ctx)
@@ -467,11 +481,14 @@ def keycloak_add_user(
     _new_file(password_file)
     password = secrets.token_urlsafe(18)
     try:
-        admin = keycloak.Admin.from_settings(settings)
+        realm_roles = list(realm_role or [])
+        if grafana_role is not None:
+            realm_roles.append(keycloak.grafana_role(settings, grafana_role))
+        admin = keycloak.Admin.from_settings(settings, realm)
         copysecret.write_file(password_file, password, new_mode=0o600)
         try:
             admin.add_user(
-                username, password, groups=group or [], realm_roles=realm_role or [],
+                username, password, groups=group or [], realm_roles=realm_roles,
                 roles=roles, create_roles=create_roles, temporary=temporary,
             )  # fmt: skip
         except keycloak.KeycloakError:
@@ -482,7 +499,8 @@ def keycloak_add_user(
         raise typer.Exit(1) from None
     for created_owner, created_role in admin.created_roles:
         typer.echo(f"created role {created_role} of {created_owner}")
-    typer.echo(f"created user {username}; password in {password_file}")
+    where = f" in realm {realm}" if realm else ""
+    typer.echo(f"created user {username}{where}; password in {password_file}")
 
 
 def _stdout_is_terminal() -> bool:
