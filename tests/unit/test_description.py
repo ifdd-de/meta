@@ -28,7 +28,7 @@ def test_demo_description_of_the_repository():
     assert description.host("rest") == "rest.demo.grid.example.ifdd.de"
     assert description.tls == "letsencrypt"
     assert description.ref == "v26.11.11"
-    assert description.refs == {}          # one release for every template
+    assert description.refs == {}  # one release for every template
 
 
 @pytest.mark.parametrize(
