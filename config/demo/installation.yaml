@@ -11,19 +11,6 @@ extra_realms: []
 context_root: ifdd.de
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 templates:
-  ref: v26.11.2
-  # Every template at its last release: 26.11.3 for keycloak, proxy and lab
-  # (lab is not part of the demo, but "config check" reads it and the
-  # integration run uses it), 26.11.6 for model, 26.11.1 for those without a
-  # later release.
-  refs:
-    keycloak: v26.11.3
-    proxy: v26.11.3
-    lab: v26.11.3
-    schema: v26.11.1
-    type: v26.11.1
-    unit: v26.11.1
-    ct: v26.11.1
-    ts: v26.11.1
-    model: v26.11.6
+  # Every template at the release all repositories share (26.11.11).
+  ref: v26.11.11
 overrides: {}

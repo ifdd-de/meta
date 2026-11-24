@@ -20,8 +20,8 @@
 #   listed under the service that owns the value.
 # - "derived" marks values that compile computes; the value here is the one
 #   for short host names (id, rest, ui, …) and a local CA.
-# - Checked against the templates at v26.11.6 (model), v26.11.3 (keycloak, proxy,
-#   lab), v26.11.2 (be, ui, ts-api, wf) and v26.11.1 (schema, type, unit, ct, ts).
+# - Checked against the templates at v26.11.11, the release all repositories
+#   share.
 
 default_context:
 
@@ -32,7 +32,7 @@ default_context:
   # Registry prefix of the own images (shared: be, ct, ui); template default ghcr.io/ifdd-de
   ifdd_registry_url: "ifdd"
   # nginx image of the static content services (shared: model, schema, type, unit)
-  ifdd_nginx_image: "nginxinc/nginx-unprivileged:1.30.6-alpine-slim"
+  ifdd_nginx_image: "nginx/nginx-unprivileged:1.30.8-alpine-slim"
 
   # ===========================================================================
   # 2. Proxy and network (Traefik)
@@ -61,7 +61,7 @@ default_context:
 
   # --- Operation ---
   # Tag of the upstream image traefik
-  ifdd_proxy_traefik_version: "v3.7.16"
+  ifdd_proxy_traefik_version: "v3.8.0"
   # Log level of Traefik
   ifdd_proxy_log_level: "WARN"
   # Memory limit of the Traefik container
@@ -160,7 +160,7 @@ default_context:
   # Shared OIDC login gate in front of services, e.g. wf (needs TLS) (derived)
   ifdd_proxy_enable_oauth2_proxy: "y"
   # Image of oauth2-proxy
-  ifdd_proxy_oauth2_proxy_image: "quay.io/oauth2-proxy/oauth2-proxy:v7.15.5-alpine"
+  ifdd_proxy_oauth2_proxy_image: "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6-alpine"
   # CA in certs/ that oauth2-proxy also trusts when calling the realm (empty = public CAs only) (derived)
   ifdd_proxy_oauth2_proxy_ca_file: "ca.crt"
   # Realm URL (issuer) for oauth2-proxy (derived)
@@ -208,7 +208,7 @@ default_context:
   # Further realms, comma-separated; each needs realm/values_<name>.toml in the instance (derived)
   ifdd_keycloak_extra_realms: ""
   # Keycloak image; its tag selects the built-in scopes of the realm generator
-  ifdd_keycloak_image: "quay.io/keycloak/keycloak:26.8.1"
+  ifdd_keycloak_image: "quay.io/keycloak/keycloak:26.8.2"
   # PostgreSQL image of the Keycloak database
   ifdd_keycloak_postgres_image: "postgres:18"
   # Port on 127.0.0.1 in development
@@ -446,9 +446,9 @@ default_context:
 
   # --- Images and resources ---
   # Grafana image
-  ifdd_ts_grafana_image: "grafana/grafana:13.3.0"
+  ifdd_ts_grafana_image: "grafana/grafana:13.3.1"
   # VictoriaMetrics image
-  ifdd_ts_vm_image: "victoriametrics/victoria-metrics:v1.155.0"
+  ifdd_ts_vm_image: "victoriametrics/victoria-metrics:v1.157.0"
   # Memory limit of Grafana
   ifdd_ts_grafana_memory_limit: "1G"
   # Memory limit of VictoriaMetrics
@@ -530,13 +530,13 @@ default_context:
 
   # --- Images ---
   # Kestra image (full, with plugins)
-  ifdd_wf_kestra_image: "kestra/kestra:v2.0.8"
+  ifdd_wf_kestra_image: "kestra/kestra:v2.0.12"
   # PostgreSQL image of the Kestra database
   ifdd_wf_postgres_image: "postgres:18"
   # Docker-in-Docker image
-  ifdd_wf_dind_image: "docker:29.9.2-dind"
+  ifdd_wf_dind_image: "docker:29.10.0-dind"
   # Base image of the papermill runner
-  ifdd_wf_runner_python_image: "python:3.14-slim"
+  ifdd_wf_runner_python_image: "python:3.15-slim"
 
   # --- Docker access (equivalent to root) ---
   # dind: own Docker daemon; socket: Docker socket of the host
@@ -618,11 +618,11 @@ default_context:
   # Base image of the hub
   ifdd_lab_hub_base_image: "node:26-slim"
   # Base image of the user servers (Jupyter Docker Stacks)
-  ifdd_lab_kernel_base_image: "quay.io/jupyter/minimal-notebook:2026-11-16"
+  ifdd_lab_kernel_base_image: "quay.io/jupyter/minimal-notebook:2026-11-23"
   # PostgreSQL image of the hub database
   ifdd_lab_postgres_image: "postgres:18"
   # Docker-in-Docker image
-  ifdd_lab_dind_image: "docker:29.9.2-dind"
+  ifdd_lab_dind_image: "docker:29.10.0-dind"
   # Images of the user servers, comma-separated; each is images/<name>/ of the instance
   ifdd_lab_images: "default"
 

@@ -81,7 +81,7 @@ installation: dev
 tls: letsencrypt
 realm: ifdd-dev
 templates:
-  ref: v26.11.3
+  ref: v26.11.11
 services:
   proxy: {}
   be: {host: data.dev.cache.example.ifdd.de}
@@ -246,10 +246,10 @@ lab (JupyterHub, `ifdd-de/lab`) is optional: an installation gets it only when
 its description lists it under `services`. `compile` then sets its Keycloak
 client (`ifdd-lab`) and lets the proxy join its internal network `lab-net`;
 without lab both stay empty. Its user image needs about 3 GB, twice with
-Docker-in-Docker. lab has no release 26.11.2: a description whose
-`templates.ref` is v26.11.2 needs a reference of lab under `templates.refs`
-(as in `config/demo/installation.yaml`), also without lab, because
-`config check` reads every template.
+Docker-in-Docker. `config check` reads every template, lab too: a
+`templates.ref` must therefore exist in every template repository, or the
+missing ones need a reference under `templates.refs`. From 26.11.11 on all
+repositories share their release numbers.
 
 wf keeps its flows in Git. By default (`wf_git: local`) ifdd-meta runs a small
 Gitea for that behind the proxy under the host `git`; `up` starts it before wf

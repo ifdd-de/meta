@@ -28,21 +28,21 @@ overrides:
   ifdd_wf_git_username: "ifdd-flows-prod"
   ifdd_wf_git_branch: "main"
 templates:
-  ref: v26.11.2                  # every template without a ref of its own below
+  ref: v26.11.11                 # every template; a service may set a ref of its own
 services:
-  proxy: {host: proxy.prod.cache.example.org, ref: v26.11.3}   # Traefik dashboard
+  proxy: {host: proxy.prod.cache.example.org}   # Traefik dashboard
   be: {host: data.prod.cache.example.org}
   ui: {host: ui.prod.cache.example.org}
-  ts: {host: ts.prod.cache.example.org, ref: v26.11.1}
+  ts: {host: ts.prod.cache.example.org}
   ts-api: {}                                  # below the host of ts
-  ct: {ref: v26.11.1}                         # no host of its own
+  ct: {}                                      # no host of its own
   wf: {host: wf.prod.cache.example.org}
-  lab: {host: lab.prod.cache.example.org, ref: v26.11.3}
-  keycloak: {host: oidc.example.org, ref: v26.11.3}
-  schema: {host: schema.model.example.org, ref: v26.11.1}
-  type: {host: type.model.example.org, ref: v26.11.1}
-  unit: {host: unit.model.example.org, ref: v26.11.1}
-  model: {host: linkml.model.example.org, ref: v26.11.6}
+  lab: {host: lab.prod.cache.example.org}
+  keycloak: {host: oidc.example.org}
+  schema: {host: schema.model.example.org}
+  type: {host: type.model.example.org}
+  unit: {host: unit.model.example.org}
+  model: {host: linkml.model.example.org}
 # Copied by create only (update leaves them alone); the targets go onto the
 # skip list of their instance.
 files:

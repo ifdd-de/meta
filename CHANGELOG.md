@@ -2,8 +2,22 @@
 
 The version scheme follows the other IFDD repositories: `YY.MM.N`.
 
-## [Unreleased]
+## [26.11.11] - 2026-11-24
 
+- Version aligned across all ifdd-de repositories (26.11.11). The demo and
+  the stage examples use `templates.ref: v26.11.11` for every template,
+  without `templates.refs` or a `ref:` per service. A unit test keeps the stage
+  examples at the release of the demo.
+- Defaults follow the upstream images of the templates at 26.11.11: nginx
+  1.30.8 (now `nginx/nginx-unprivileged`; `nginxinc` gets no newer releases),
+  Traefik v3.8.0, oauth2-proxy v7.15.6, Keycloak 26.8.2, Grafana 13.3.1,
+  VictoriaMetrics v1.157.0, Kestra v2.0.12, DinD 29.10.0 (wf, lab),
+  `python:3.15-slim` (papermill runner), minimal-notebook 2026-11-23.
+- Upgrade, Keycloak 26.8.2: the admin API accepts only tokens with the scope
+  `kc-admin-api`. `ifdd-meta keycloak` logs in through `admin-cli` of the
+  realm master, which Keycloak gives the scope. A realm imported before needs
+  the scope for its user admin client by hand (keycloak 26.11.11, instance
+  documentation, realm).
 - Several servers: `services` may be a mapping with one block per service
   (`host:`, `external: true`, `ref:`); the list form stays valid. External
   services get host names and URLs but no instance, alias, DNS record or CA
