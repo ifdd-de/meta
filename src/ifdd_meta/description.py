@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import fnmatch
 import re
+import tomllib
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -17,9 +19,14 @@ _REALM = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _TOP = {
     "installation", "hosts", "tls", "contact", "realm", "extra_realms",
-    "context_root", "services", "templates", "overrides", "wf_git", "ca_certs",
+    "context_root", "services", "templates", "overrides", "wf_git", "ca_certs", "files",
 }  # fmt: skip
 _BLOCK_KEYS = {"host", "external", "ref"}
+#: Targets of files: that keycloak/realm/build_realm.py turns into realm import files.
+REALM_VALUES = "keycloak/realm/values_*.toml"
+#: Targets that files: must not write: made by create (.env from the *.dist file,
+#: with its secrets) or by cruft and Git.
+_FORBIDDEN_TARGETS = {".env", ".cruft.json"}
 
 
 class DescriptionError(ValueError):
@@ -48,6 +55,8 @@ class Description:
     external: tuple[str, ...] = ()
     #: CA certificates (paths relative to the description) the services trust
     ca_certs: tuple[str, ...] = ()
+    #: private files: (target "<service>/<path>", source relative to the description)
+    files: tuple[tuple[str, str], ...] = ()
 
     def host(self, label: str) -> str:
         if label in self.names:
@@ -138,6 +147,9 @@ def load(path: Path) -> Description:
             f"{path}: wf_git must be one of {', '.join(WF_GIT_MODES)}: {wf_git!r}"
         )
 
+    files = _files(path, data.get("files"), services)
+    _check_realm_files(path, files, services, realm, extra)
+
     if tls == "letsencrypt" and not (suffix or names):
         raise DescriptionError(
             f"{path}: tls letsencrypt needs public names: hosts.suffix or a host per service"
@@ -169,6 +181,7 @@ def load(path: Path) -> Description:
         names=names,
         external=tuple(s for s in SERVICES if s in external),
         ca_certs=tuple(ca_certs),
+        files=tuple(files),
     )
 
 
@@ -231,6 +244,91 @@ def _blocks(path: Path, raw: dict) -> tuple[list[str], list[str], dict[str, str]
     if not services:
         raise DescriptionError(f"{path}: services: no local service")
     return services, external, names, refs
+
+
+def _files(path: Path, raw: Any, services: list[str]) -> list[tuple[str, str]]:
+    """files: a list of {from, to}; from relative to the description, to below a local service."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise DescriptionError(f"{path}: files must be a list of {{from: …, to: …}}")
+    files = []
+    for number, entry in enumerate(raw, start=1):
+        where = f"{path}: files, entry {number}"
+        if not isinstance(entry, dict) or set(entry) != {"from", "to"}:
+            raise DescriptionError(f"{where}: expected exactly the keys from and to")
+        source, target = entry["from"], entry["to"]
+        if not all(isinstance(value, str) and value.strip() for value in (source, target)):
+            raise DescriptionError(f"{where}: from and to must be non-empty texts")
+        if not (path.parent / source).is_file():
+            raise DescriptionError(f"{where}: from: file not found: {source}")
+        parts = PurePosixPath(target).parts
+        if (
+            target != target.strip()
+            or "\\" in target
+            or PurePosixPath(target).is_absolute()
+            or len(parts) < 2
+            or any(part in ("..", ".") for part in parts)
+            or str(PurePosixPath(*parts)) != target
+        ):
+            raise DescriptionError(
+                f"{where}: to must be <service>/<path inside the instance>: {target!r}"
+            )
+        if parts[0] not in services:
+            raise DescriptionError(
+                f"{where}: to: {parts[0]!r} is not a local service of this installation"
+            )
+        if ".git" in parts[1:] or (len(parts) == 2 and parts[-1] in _FORBIDDEN_TARGETS):
+            raise DescriptionError(f"{where}: to: {target} is written by create, cruft or Git")
+        files.append((target, source))
+    targets = [target for target, _ in files]
+    if len(set(targets)) != len(targets):
+        raise DescriptionError(f"{path}: files: a target appears twice")
+    return files
+
+
+def realm_files(files: tuple[tuple[str, str], ...] | list[tuple[str, str]]) -> list[str]:
+    """The targets of files: that build_realm.py reads (keycloak/realm/values_*.toml)."""
+    return [
+        target
+        for target, _ in files
+        if fnmatch.fnmatchcase(target, REALM_VALUES) and target.count("/") == 2
+    ]
+
+
+def _check_realm_files(path, files, services, realm, extra) -> None:
+    """With a local Keycloak: one values file per further realm, and none for another realm."""
+    if "keycloak" not in services:
+        return
+    sources = dict(files)
+    found: dict[str, str] = {}
+    for target in realm_files(files):
+        source = path.parent / sources[target]
+        try:
+            name = tomllib.loads(source.read_text(encoding="utf-8"))["realm"]["name"]
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+            raise DescriptionError(
+                f"{path}: files: {sources[target]}: no realm name ([realm] name): {error}"
+            ) from None
+        if not isinstance(name, str) or name not in extra:
+            where = "the realm of the installation" if name == realm else "not in extra_realms"
+            raise DescriptionError(
+                f"{path}: files: {sources[target]} is for realm {name!r}, {where}; "
+                "values files are for the further realms (extra_realms) only"
+            )
+        if name in found:
+            raise DescriptionError(
+                f"{path}: files: realm {name!r} has two values files "
+                f"({found[name]}, {sources[target]})"
+            )
+        found[name] = sources[target]
+    missing = [name for name in extra if name not in found]
+    if missing:
+        raise DescriptionError(
+            f"{path}: extra_realms {', '.join(missing)} without a values file: add to files "
+            "{from: <file>, to: keycloak/realm/values_<name>.toml}; Keycloak creates a realm "
+            "only from its import file"
+        )
 
 
 def _check_hosts(path, services, external, names, suffix, wf_git) -> None:

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ifdd_meta import create, update
+from ifdd_meta.catalogue import SKIPS
 from ifdd_meta.runner import Run
 from ifdd_meta.settings import load
 
@@ -219,3 +220,42 @@ def test_merge_env_keeps_hand_made_values_quotes_and_export():
 )
 def test_target_of(dist, target):
     assert update.target_of(dist) == target
+
+
+def test_files_stay_as_create_wrote_them(tmp_path, templates):
+    """files: create copies (also over a template file), update copies nothing again.
+
+    README.md changes in v2; on the skip list, the instance keeps its own one.
+    """
+    directory = tmp_path / "own"
+    settings = installation(directory, templates, "v1")
+    (directory / "readme.txt").write_text("own readme\n")
+    (directory / "token.txt").write_text("token 1\n")
+    with (directory / "ifdd-meta.yaml").open("a") as out:
+        out.write("files:\n  be/README.md: readme.txt\n  be/private/token.txt: token.txt\n")
+    settings = load(cwd=directory, environ={})
+    create.create(settings, run_for(settings, "create")[0], is_root=lambda: False)
+    path = settings["workdir"] / "backend"
+    assert (path / "README.md").read_text() == "own readme\n"
+    assert json.loads((path / ".cruft.json").read_text())["skip"] == [
+        *SKIPS["be"],
+        "README.md",
+        "private/token.txt",
+    ]
+
+    (directory / "token.txt").write_text("token 2\n")  # changed at the source
+    (directory / "ifdd-meta.yaml").write_text(
+        (directory / "ifdd-meta.yaml").read_text().replace("ref: v1", "ref: v2")
+    )
+    settings = load(cwd=directory, environ={})
+    run, _ = run_for(settings, "update")
+    assert update.update(settings, run) == ["be"]
+    assert (path / "README.md").read_text() == "own readme\n"  # not release 2's
+    assert (path / "private/token.txt").read_text() == "token 1\n"  # not copied again
+    assert "IFDD_BE_VERSION=2" in (path / ".env").read_text()  # the update did happen
+    assert git(path, "status", "--porcelain") == ""
+    assert json.loads((path / ".cruft.json").read_text())["skip"] == [
+        *SKIPS["be"],
+        "README.md",
+        "private/token.txt",
+    ]

@@ -276,6 +276,8 @@ services:
   wf: {ref: v26.11.2}                         # instead of templates.refs
   git: {host: git.dev.example.ifdd.de}        # host only, no service
 ca_certs: [certs/root.crt, certs/sub.crt]     # further CAs, relative to this file
+files:                                        # private files, copied by create only
+  - {from: realm-dev.toml, to: keycloak/realm/values_dev.toml}
 ```
 
 The list form stays valid. `compile` rejects an unknown service, a host for a
@@ -289,8 +291,22 @@ other server reads them from the file of the setting `keycloak_secrets` (mode
 0600 required) instead of `keycloak/.env`. Of `ca_certs`, `create` copies each as
 `certs/extra-<name>.crt` into the instances that copy `certs/*.crt`; ct, which
 reads a single file, gets `certs/ca-bundle.crt` (local CA first, then the
-extras) unless the TLS mode is Let's Encrypt. Control from a separate machine
-(for instance over ssh without agent forwarding) is not part of the tool.
+extras) unless the TLS mode is Let's Encrypt. oauth2-proxy (proxy) gets the
+same bundle as `certs/ca-bundle.crt` in every TLS mode (with Let's Encrypt
+without a local CA, next to the system store); `compile` then sets
+`ifdd_proxy_oauth2_proxy_ca_file` to it. oauth2-proxy (v7.15.5) reads every
+certificate of the file (Go `AppendCertsFromPEM`; tested with the binary). Control
+from a separate machine (for instance over ssh without agent forwarding) is not
+part of the tool.
+
+`files` copies private files into the instances once, at `create`: each target
+`<service>/<path>` of a local service goes onto the skip list of its instance,
+so `cruft update` leaves it alone even where it replaces a template file; `update`
+does not copy again (the files may be changed on the server). Targets
+`keycloak/realm/values_*.toml` are the values files of the further realms:
+`compile` reads `[realm] name` from each and requires exactly one per name of
+`extra_realms` (only with a local Keycloak), `create` runs
+`realm/build_realm.py --values` on them before the first commit.
 
 ## 11. From the old meta repository
 

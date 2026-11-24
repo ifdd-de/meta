@@ -31,6 +31,23 @@ The version scheme follows the other IFDD repositories: `YY.MM.N`.
   without a suffix gives model a host in its block.
 - Integration tests: model serves a LinkML source as `application/yaml` with
   CORS `*`, behind the proxy with its security headers.
+- `files:` in the description: private files that `create` copies into the
+  instances (`{from, to}`, target `<service>/<path>` of a local service), on the
+  skip list of their instance; a target may replace a template file. `update`
+  does not copy them again.
+- Further realms: the values files `keycloak/realm/values_*.toml` from `files:`
+  go to `realm/build_realm.py` in `create`; `compile` requires one per name of
+  `extra_realms` (local Keycloak only) and none for another realm.
+- oauth2-proxy trusts `ca_certs`: with `ca_certs`, `create` writes
+  `proxy/certs/ca-bundle.crt` (local CA and `ca_certs`) and `compile` sets
+  `ifdd_proxy_oauth2_proxy_ca_file` to it, so the login gate reaches a realm on
+  another server.
+- Upgrade: a description with `extra_realms` and a local Keycloak needs a values
+  file per further realm in `files:`; `compile` stops without them.
+- CI: the integration run has a further realm `dev` from a values file (through
+  `files:`) and checks that Keycloak serves it; a further CA in `ca_certs` puts
+  the login gate of wf onto the bundle (oauth2-proxy starts only if it reads
+  the local CA from it).
 
 ## [26.11.5] - 2026-11-23
 

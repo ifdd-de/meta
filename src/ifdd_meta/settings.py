@@ -84,6 +84,8 @@ FIELDS = (
     Field("external", "list", [], SERVICES),
     #: CA certificates the services trust besides the local CA (copied into certs/)
     Field("ca_certs", "paths", []),
+    #: private files: target "<service>/<path>" in the instances -> source file
+    Field("files", "mapping", {}),
     #: client secrets of an external Keycloak (from 'ifdd-meta keycloak secrets')
     Field("keycloak_secrets", "path", "keycloak-secrets.env"),
 )
@@ -257,7 +259,7 @@ def _convert(field: Field, raw: Any, relative_to: Path) -> Any:
             isinstance(k, str) and isinstance(v, str) and v for k, v in raw.items()
         ):
             raise SettingsError("expected a mapping of names to non-empty strings")
-        if field.name == "wheels":
+        if field.name in ("wheels", "files"):
             return {
                 key: (p if (p := Path(value).expanduser()).is_absolute() else relative_to / p)
                 for key, value in raw.items()

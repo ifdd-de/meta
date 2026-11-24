@@ -32,6 +32,7 @@ from .catalogue import (
     SKIPS,
     WHEELS,
 )
+from .description import realm_files
 from .runner import Run, StepError
 from .settings import Settings
 from .templates import location
@@ -104,7 +105,8 @@ def create(
         ref = settings.ref(service)
         run.overview(f"Creating {service} ({ref})")
         before = _directories(workdir)
-        skips = [argument for path in SKIPS[service] for argument in ("--skip", path)]
+        skip_paths = [*SKIPS[service], *_own_targets(settings, service)]
+        skips = [argument for path in skip_paths for argument in ("--skip", path)]
         run.command(
             [
                 sys.executable,
@@ -143,6 +145,7 @@ def create(
             _save_state(settings, state)
     else:
         _wf_git_token(settings, state, run)
+    _private_files(settings, state, services, run)
     for service in services:
         _commit(workdir / state[service], service, settings.ref(service), run)
     return state
@@ -281,7 +284,7 @@ def _system_trust(settings: Settings, state, run: Run) -> None:
 
 
 def _extra_ca(settings: Settings, state, services, run: Run) -> None:
-    """The setting ca_certs into certs/ of every CA user; for ct also one bundle."""
+    """The setting ca_certs into certs/ of every CA user; one bundle for ct and proxy."""
     certs = settings["ca_certs"]
     if not certs:
         return
@@ -290,6 +293,10 @@ def _extra_ca(settings: Settings, state, services, run: Run) -> None:
             raise CreateError(f"ca_certs: file not found: {cert}")
     workdir: Path = settings["workdir"]
     local = workdir / state["proxy"] / "certs" / "ca.crt" if "proxy" in state else None
+    parts = [local] if settings["tls"] == "local-ca" and local and local.is_file() else []
+    bundle_text = "".join(
+        p.read_text(encoding="utf-8").rstrip("\n") + "\n" for p in [*parts, *certs]
+    )
     for service in CA_USERS:
         if service not in services or service not in state:
             continue
@@ -301,14 +308,51 @@ def _extra_ca(settings: Settings, state, services, run: Run) -> None:
     for service, path, variable in CA_FILE_SETTINGS:
         if service not in services or service not in state or settings["tls"] == "letsencrypt":
             continue  # with Let's Encrypt ct keeps the system trust store
-        parts = [local] if settings["tls"] == "local-ca" and local and local.is_file() else []
-        bundle = workdir / state[service] / "certs" / CA_BUNDLE
-        bundle.write_text(
-            "".join(p.read_text(encoding="utf-8").rstrip("\n") + "\n" for p in [*parts, *certs]),
-            encoding="utf-8",
-        )
+        (workdir / state[service] / "certs" / CA_BUNDLE).write_text(bundle_text, encoding="utf-8")
         copysecret.set_env(workdir / state[service] / path, variable, f"/certs/{CA_BUNDLE}")
         run.overview(f"{service}/{path}: {variable}=/certs/{CA_BUNDLE}")
+    if "proxy" in services and "proxy" in state:
+        # oauth2-proxy (login gate) calls the realm, perhaps on another server; compile
+        # names this file in ifdd_proxy_oauth2_proxy_ca_file when ca_certs is set.
+        target = workdir / state["proxy"] / "certs"
+        target.mkdir(exist_ok=True)
+        (target / CA_BUNDLE).write_text(bundle_text, encoding="utf-8")
+        run.overview(f"proxy/certs/{CA_BUNDLE}: CA bundle for oauth2-proxy")
+
+
+def _own_targets(settings: Settings, service: str) -> list[str]:
+    """Paths inside the instance of service that the setting files writes (for the skip list)."""
+    prefix = f"{service}/"
+    return [
+        target.removeprefix(prefix) for target in settings["files"] if target.startswith(prefix)
+    ]
+
+
+def _private_files(settings: Settings, state, services, run: Run) -> None:
+    """The setting files into the instances; then the realm files of keycloak."""
+    workdir: Path = settings["workdir"]
+    for target, source in settings["files"].items():
+        service, _, inside = target.partition("/")
+        if service not in settings["services"] or not inside:
+            raise CreateError(f"files: {target}: not <service>/<path> of a local service")
+        if service not in services or service not in state:
+            continue
+        if not source.is_file():
+            raise CreateError(f"files: {target}: source not found: {source}")
+        destination = workdir / state[service] / inside
+        if destination.exists():
+            run.overview(f"{target}: replaces the template file (now on the skip list)")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        run.overview(f"Copied {source.name} -> {target}")
+    realms = realm_files(list(settings["files"].items()))
+    if realms and "keycloak" in services and "keycloak" in state:
+        inside = [target.removeprefix("keycloak/") for target in realms]
+        run.overview(f"Building the realm import files of {len(inside)} further realm(s)")
+        run.command(
+            [sys.executable, "realm/build_realm.py", "--values", *inside],
+            cwd=workdir / state["keycloak"],
+        )
 
 
 def _keycloak_source(settings: Settings, state) -> Path | None:

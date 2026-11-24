@@ -25,12 +25,19 @@ def test_short_names_reproduce_the_defaults(tmp_path):
     assert result.values == defaults()
 
 
+def realm_file(tmp_path: Path, realm: str) -> str:
+    """A values file of a further realm, as files: copies it to keycloak/realm/."""
+    (tmp_path / f"realm-{realm}.toml").write_text(f'[realm]\nname = "{realm}"\n', encoding="utf-8")
+    return f"  - {{from: realm-{realm}.toml, to: keycloak/realm/values_{realm}.toml}}\n"
+
+
 def test_public_names_with_lets_encrypt(tmp_path):
+    files = "files:\n" + realm_file(tmp_path, "r2") + realm_file(tmp_path, "r3")
     result = compiler.compile_description(
         describe(
             tmp_path,
             "installation: demo\nhosts:\n  suffix: a.example.org\ntls: letsencrypt\n"
-            "contact: ops@example.org\nrealm: r1\nextra_realms: [r2, r3]\n",
+            "contact: ops@example.org\nrealm: r1\nextra_realms: [r2, r3]\n" + files,
         )
     )
     v = result.values
@@ -268,3 +275,42 @@ def test_external_services_give_urls_but_no_local_hosts(tmp_path):
     assert "keycloak_secrets: keycloak-secrets.env\n" in settings_text
     assert "    keycloak: v2\n" in settings_text
     assert "services: [proxy, be, ui, ct, ts, ts-api]\n" in settings_text
+
+
+def test_files_reach_the_settings_and_resolve_next_to_them(tmp_path):
+    files = "files:\n" + realm_file(tmp_path, "dev")
+    (tmp_path / "my theme.css").write_text("/* own */\n")
+    files += '  - {from: "my theme.css", to: keycloak/themes/ifdd/login/resources/css/ifdd.css}\n'
+    text = "installation: prod\nrealm: prod\nextra_realms: [dev]\n" + files
+    result = compiler.compile_description(describe(tmp_path, text))
+    compiler.write(result, tmp_path)
+    loaded = settings.load(settings_file=tmp_path / "ifdd-meta.yaml", cwd=tmp_path, environ={})
+    assert loaded["files"] == {
+        "keycloak/realm/values_dev.toml": tmp_path / "realm-dev.toml",
+        "keycloak/themes/ifdd/login/resources/css/ifdd.css": tmp_path / "my theme.css",
+    }
+    assert (
+        "files:"
+        not in compiler.compile_description(describe(tmp_path, "installation: x\n")).files[
+            "ifdd-meta.yaml"
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("tls", "ca_certs", "expected"),
+    [
+        ("local-ca", False, "ca.crt"),
+        ("own", False, "ca.crt"),
+        ("letsencrypt", False, ""),
+        ("local-ca", True, "ca-bundle.crt"),
+        ("own", True, "ca-bundle.crt"),
+        ("letsencrypt", True, "ca-bundle.crt"),
+    ],
+)
+def test_oauth2_proxy_trusts_the_bundle_with_ca_certs(tmp_path, tls, ca_certs, expected):
+    (tmp_path / "corp.crt").write_text("x")
+    text = f"installation: x\nhosts:\n  suffix: a.example.org\ntls: {tls}\n"
+    text += "ca_certs: [corp.crt]\n" if ca_certs else ""
+    values = compiler.compile_description(describe(tmp_path, text)).values
+    assert values["ifdd_proxy_oauth2_proxy_ca_file"] == expected

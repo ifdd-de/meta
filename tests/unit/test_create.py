@@ -25,6 +25,14 @@ FILES = {
         ".env": "IFDD_KEYCLOAK_PROXY_CLIENT_SECRET=proxy1\nIFDD_KEYCLOAK_TS_CLIENT_SECRET=ts1\n"
         "IFDD_KEYCLOAK_CT_CLIENT_SECRET=ct1\nIFDD_KEYCLOAK_API_CLIENT_SECRET=api1\n"
         "IFDD_KEYCLOAK_LAB_CLIENT_SECRET=lab1\n",
+        # Like the template's script: one import file per values file, named after the realm.
+        "realm/build_realm.py": "import pathlib, sys, tomllib\n"
+        "assert sys.argv[1] == '--values', sys.argv\n"
+        "for name in sys.argv[2:]:\n"
+        "    realm = tomllib.loads(pathlib.Path(name).read_text())['realm']['name']\n"
+        "    pathlib.Path(f'realm/import/{realm}-realm.json').write_text('{}')\n",
+        "realm/import/.gitkeep": "",
+        "themes/ifdd/login/resources/css/ifdd.css": "/* template */\n",
     },
     "be": {"certs/README.md": "x"},
     "ct": {
@@ -148,6 +156,8 @@ def test_create_everything(tmp_path, templates):
         assert ".cruft.json" in tracked
         assert not [name for name in tracked if create.secret_like(name)]
     assert ".env" not in git(work / "keycloak", "ls-files").splitlines()
+    # without ca_certs oauth2-proxy keeps the local CA (ca.crt): no bundle
+    assert not (work / "proxy" / "certs" / "ca-bundle.crt").exists()
 
 
 def test_existing_instances_are_never_overwritten(tmp_path, templates):
@@ -296,6 +306,8 @@ def test_ca_certs_go_to_every_ca_user_and_into_one_bundle_for_ct(tmp_path, templ
     assert bundle.endswith("-----root-----\n-----proxy-ca-----\n")
     assert "IFDD_CT_CA_BUNDLE=/certs/ca-bundle.crt\n" in (work / "ct" / ".env").read_text()
     assert any("CA certificates (2) -> be/certs/" in line for line in lines)
+    # the same bundle for oauth2-proxy, which calls the realm (perhaps on another server)
+    assert (work / "proxy" / "certs" / "ca-bundle.crt").read_text() == bundle
 
 
 def test_ca_certs_with_lets_encrypt_keep_the_system_trust_of_ct(tmp_path, templates):
@@ -306,6 +318,9 @@ def test_ca_certs_with_lets_encrypt_keep_the_system_trust_of_ct(tmp_path, templa
     assert (ct / "certs" / "extra-root.crt").is_file()  # for the build behind a TLS proxy
     assert not (ct / "certs" / "ca-bundle.crt").exists()
     assert "IFDD_CT_CA_BUNDLE=\n" in (ct / ".env").read_text()
+    # oauth2-proxy: ca_certs only, besides the system store (no local CA)
+    proxy_bundle = settings["workdir"] / "proxy" / "certs" / "ca-bundle.crt"
+    assert proxy_bundle.read_text() == "-----root-----\n-----proxy-ca-----\n"
 
 
 def test_secrets_of_an_external_keycloak_come_from_the_file(tmp_path, templates):
@@ -337,3 +352,71 @@ def test_secrets_file_of_an_external_keycloak_is_checked(tmp_path, templates):
     settings = settings_for(other, templates, "services: [proxy, ct]\nexternal: [keycloak]\n")
     with pytest.raises(create.CreateError, match="owner only"):
         run_create(settings)
+
+
+def private_files(tmp_path) -> str:
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "realm-dev.toml").write_text('[realm]\nname = "dev"\n')
+    (tmp_path / "private" / "theme.css").write_text("/* own */\n")
+    return (
+        "files:\n"
+        "  keycloak/realm/values_dev.toml: private/realm-dev.toml\n"
+        "  keycloak/themes/ifdd/login/resources/css/ifdd.css: private/theme.css\n"
+    )
+
+
+def test_files_are_copied_kept_out_of_updates_and_build_the_realms(tmp_path, templates):
+    settings = settings_for(
+        tmp_path, templates, "services: [proxy, keycloak]\n" + private_files(tmp_path)
+    )
+    _, lines = run_create(settings)
+    keycloak = settings["workdir"] / "keycloak"
+    assert (keycloak / "realm/values_dev.toml").read_text() == '[realm]\nname = "dev"\n'
+    assert (keycloak / "themes/ifdd/login/resources/css/ifdd.css").read_text() == "/* own */\n"
+    cruft = json.loads((keycloak / ".cruft.json").read_text())
+    assert cruft["skip"] == [
+        *SKIPS["keycloak"],
+        "realm/values_dev.toml",
+        "themes/ifdd/login/resources/css/ifdd.css",
+    ]
+    assert (keycloak / "realm/import/dev-realm.json").is_file()  # build_realm.py ran
+    assert any("ifdd.css: replaces the template file" in line for line in lines)
+    assert not any("values_dev.toml: replaces" in line for line in lines)
+    # copied and generated files are part of the first commit
+    assert git(keycloak, "status", "--porcelain") == ""
+    tracked = git(keycloak, "ls-files").splitlines()
+    assert {"realm/values_dev.toml", "realm/import/dev-realm.json"} <= set(tracked)
+    proxy = json.loads((settings["workdir"] / "proxy" / ".cruft.json").read_text())
+    assert proxy["skip"] == list(SKIPS["proxy"])
+
+
+def test_files_only_for_the_services_being_created(tmp_path, templates):
+    settings = settings_for(
+        tmp_path, templates, "services: [proxy, keycloak]\n" + private_files(tmp_path)
+    )
+    run_create(settings, only=["proxy"])
+    assert not (settings["workdir"] / "keycloak").exists()
+
+
+def test_files_with_a_missing_source_or_a_foreign_service(tmp_path, templates):
+    settings = settings_for(
+        tmp_path, templates, "services: [proxy]\nfiles:\n  proxy/x.txt: missing.txt\n"
+    )
+    with pytest.raises(create.CreateError, match="source not found"):
+        run_create(settings)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.txt").write_text("x")
+    settings = settings_for(other, templates, "services: [proxy]\nfiles:\n  be/x.txt: x.txt\n")
+    with pytest.raises(create.CreateError, match="not <service>/<path> of a local service"):
+        run_create(settings)
+
+
+def test_ca_certs_with_own_certificates_give_oauth2_proxy_the_extras(tmp_path, templates):
+    """TLS mode own: no local CA at create time; the bundle holds ca_certs."""
+    settings = settings_for(
+        tmp_path, templates, "tls: own\nservices: [proxy]\n" + extra_certs(tmp_path)
+    )
+    run_create(settings)
+    bundle = settings["workdir"] / "proxy" / "certs" / "ca-bundle.crt"
+    assert bundle.read_text() == "-----root-----\n-----proxy-ca-----\n"
