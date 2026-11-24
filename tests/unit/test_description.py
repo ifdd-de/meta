@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ifdd_meta.description import DescriptionError, load
+from ifdd_meta.description import DescriptionError, load, realm_files
 from ifdd_meta.settings import DEFAULT_SERVICES
 
 
@@ -142,3 +142,134 @@ def test_ca_certs_must_exist_and_differ(tmp_path):
         load(describe(tmp_path, "installation: x\nca_certs: [b.crt]\n"))
     with pytest.raises(DescriptionError, match="names must differ"):
         load(describe(tmp_path, "installation: x\nca_certs: [a/ca.crt, ca.crt]\n"))
+
+
+# files: private files into the instances (create copies them)
+
+PROD = "installation: prod\nrealm: prod\nextra_realms: [dev, int]\nservices: [proxy, keycloak]\n"
+
+
+def values_file(tmp_path: Path, name: str, realm: str) -> None:
+    (tmp_path / name).write_text(f'[realm]\nname = "{realm}"\ndisplay_name = "x"\n')
+
+
+def prod_files(tmp_path: Path) -> str:
+    values_file(tmp_path, "realm-dev.toml", "dev")
+    values_file(tmp_path, "realm-int.toml", "int")
+    (tmp_path / "theme.css").write_text("/* own */\n")
+    return (
+        "files:\n"
+        "  - {from: realm-dev.toml, to: keycloak/realm/values_dev.toml}\n"
+        "  - {from: realm-int.toml, to: keycloak/realm/values_int.toml}\n"
+        "  - {from: theme.css, to: keycloak/themes/ifdd/login/resources/css/ifdd.css}\n"
+    )
+
+
+def test_files_with_a_values_file_per_further_realm(tmp_path):
+    d = load(describe(tmp_path, PROD + prod_files(tmp_path)))
+    assert d.files == (
+        ("keycloak/realm/values_dev.toml", "realm-dev.toml"),
+        ("keycloak/realm/values_int.toml", "realm-int.toml"),
+        ("keycloak/themes/ifdd/login/resources/css/ifdd.css", "theme.css"),
+    )
+    assert realm_files(d.files) == [
+        "keycloak/realm/values_dev.toml",
+        "keycloak/realm/values_int.toml",
+    ]
+
+
+def test_files_also_with_service_blocks(tmp_path):
+    (tmp_path / "token").write_text("t")
+    text = DEV + "files:\n  - {from: token, to: ts/secrets/token}\n"
+    assert load(describe(tmp_path, text)).files == (("ts/secrets/token", "token"),)
+
+
+def test_realm_files_are_only_the_values_files_of_keycloak():
+    files = [
+        ("keycloak/realm/values_a.toml", "a"),
+        ("keycloak/realm/values.toml", "b"),
+        ("keycloak/realm/x/values_c.toml", "c"),
+        ("keycloak/realm/values_d.json", "d"),
+        ("wf/realm/values_e.toml", "e"),
+    ]
+    assert realm_files(files) == ["keycloak/realm/values_a.toml"]
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        ("  - {from: theme.css}\n", "exactly the keys from and to"),
+        ("  - {from: theme.css, to: proxy/x, mode: 1}\n", "exactly the keys from and to"),
+        ("  - {from: nothing.css, to: proxy/x.css}\n", "file not found: nothing.css"),
+        ("  - {from: theme.css, to: ''}\n", "non-empty texts"),
+        ("  - {from: theme.css, to: /etc/x}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: proxy}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: proxy/../be/x}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: proxy/./x}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: proxy//x}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: 'proxy\\x'}\n", "to must be <service>/<path"),
+        ("  - {from: theme.css, to: be/x}\n", "'be' is not a local service"),
+        ("  - {from: theme.css, to: proxy/.env}\n", "written by create, cruft or Git"),
+        ("  - {from: theme.css, to: proxy/.cruft.json}\n", "written by create"),
+        ("  - {from: theme.css, to: proxy/.git/config}\n", "written by create"),
+        ("  - {from: theme.css, to: proxy/x}\n  - {from: theme.css, to: proxy/x}\n",
+         "a target appears twice"),
+    ],
+)  # fmt: skip
+def test_invalid_files(tmp_path, entries, message):
+    text = PROD + prod_files(tmp_path) + entries
+    with pytest.raises(DescriptionError, match=message):
+        load(describe(tmp_path, text))
+
+
+def test_files_must_be_a_list(tmp_path):
+    with pytest.raises(DescriptionError, match="files must be a list"):
+        load(describe(tmp_path, "installation: x\nfiles: {a: b}\n"))
+
+
+@pytest.mark.parametrize(
+    ("realm", "message"),
+    [
+        ("prod", "for realm 'prod', the realm of the installation"),
+        ("test", "for realm 'test', not in extra_realms"),
+        ("dev", "realm 'dev' has two values files"),
+        (1, "for realm 1, not in extra_realms"),
+    ],
+)
+def test_values_file_for_a_wrong_realm(tmp_path, realm, message):
+    if isinstance(realm, str):
+        values_file(tmp_path, "realm-x.toml", realm)
+    else:
+        (tmp_path / "realm-x.toml").write_text(f"[realm]\nname = {realm}\n")
+    text = (
+        PROD + prod_files(tmp_path) + "  - {from: realm-x.toml, to: keycloak/realm/values_x.toml}\n"
+    )
+    with pytest.raises(DescriptionError, match=message):
+        load(describe(tmp_path, text))
+
+
+def test_further_realm_without_values_file(tmp_path):
+    text = PROD + prod_files(tmp_path).replace(
+        "  - {from: realm-int.toml, to: keycloak/realm/values_int.toml}\n", ""
+    )
+    with pytest.raises(DescriptionError, match="extra_realms int without a values file"):
+        load(describe(tmp_path, text))
+
+
+@pytest.mark.parametrize(
+    "content", ["[realm\n", "[roles]\npublic = 'x'\n", "realm = 'dev'\n", "[realm]\ntitle = 'x'\n"]
+)
+def test_values_file_without_realm_name(tmp_path, content):
+    (tmp_path / "broken.toml").write_text(content)
+    text = (
+        PROD + prod_files(tmp_path) + "  - {from: broken.toml, to: keycloak/realm/values_b.toml}\n"
+    )
+    with pytest.raises(DescriptionError, match=r"broken.toml: no realm name"):
+        load(describe(tmp_path, text))
+
+
+def test_realm_files_are_not_checked_without_a_local_keycloak(tmp_path):
+    """extra_realms belong to the server of Keycloak; another server only names them."""
+    text = DEV.replace("installation: dev\n", "installation: dev\nextra_realms: [x]\n")
+    assert "extra_realms: [x]" in text
+    assert load(describe(tmp_path, text)).files == ()

@@ -72,7 +72,8 @@ file, but no instance, no proxy alias, no DNS record and no CA copy. Every
 service that a local one needs must be local or external, otherwise `compile`
 stops (ts-api needs ts on the same server). `ca_certs` lists further CA
 certificates, relative to the description: `create` copies them into every
-instance that trusts CAs and gives ct one bundle file.
+instance that trusts CAs and gives ct and oauth2-proxy (the login gate of the
+proxy, which calls the realm) one bundle file each.
 
 ```yaml
 installation: dev
@@ -105,6 +106,36 @@ to write it to a terminal:
 
 Copy the file to the other server without putting it into a shell history or a
 repository.
+
+### Private files and further realms
+
+`files` lists private files that `create` copies into the instances, each with
+its source (relative to the description) and its target (`<service>/<path>` of
+a local service). The targets go onto the skip list of `cruft update`; a target
+may replace a file of the template (for instance the login theme), which then
+no longer receives template changes. Only `create` copies, `update` leaves the
+files alone (they may be changed on the server). Never `.env`, `.cruft.json` or
+`.git`.
+
+```yaml
+realm: prod
+extra_realms: [dev, int]
+files:
+  - {from: realm-dev.toml, to: keycloak/realm/values_dev.toml}
+  - {from: realm-int.toml, to: keycloak/realm/values_int.toml}
+  - {from: theme/ifdd.css, to: keycloak/themes/ifdd/login/resources/css/ifdd.css}
+```
+
+With a local Keycloak every further realm needs its values file (a copy of the
+instance's `realm/values.toml` with another `[realm] name`) at
+`keycloak/realm/values_<x>.toml`; `compile` checks both directions by the realm
+name in the file. `create` then runs `realm/build_realm.py --values …`, and
+Keycloak imports these realms at its first start. A realm added later: add it
+to `extra_realms` and `files`, `update` keycloak (it lists the new secrets of
+`dotenv.dist`: add them to `.env` with random values), copy the values file by
+hand, run
+`python3 realm/build_realm.py --values realm/values_<x>.toml`, commit, restart
+Keycloak.
 
 `config check` compares the variables file with the `cookiecutter.json` of
 every template at the chosen reference: a missing variable, one that no template

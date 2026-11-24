@@ -82,6 +82,22 @@ jobs:
           templates: $TEMPLATES
           EOF
           ifdd-meta compile ci-run/installation.yaml
+          # A further realm "dev" as on the Keycloak of several stages: its values
+          # file (the template's, renamed) goes in through files:, create runs
+          # build_realm.py, Keycloak imports it at its first start.
+          python tools/ci/extra_realm.py "$SETTINGS" dev ci-run/realm-dev.toml
+          # A further CA (as a company CA would be): the services get a copy, ct and
+          # oauth2-proxy a bundle with the local CA; the login gate of wf only
+          # starts if oauth2-proxy reads the local CA from that bundle.
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=Further CI CA" \
+            -keyout /dev/null -out ci-run/further-ca.crt 2>/dev/null
+          cat >> ci-run/installation.yaml <<EOF
+          extra_realms: [dev]
+          files:
+            - {from: realm-dev.toml, to: keycloak/realm/values_dev.toml}
+          ca_certs: [further-ca.crt]
+          EOF
+          ifdd-meta compile ci-run/installation.yaml
           ifdd-meta --settings "$SETTINGS" config check
 
       - name: Create
@@ -94,6 +110,12 @@ jobs:
           # runner. The template takes port numbers only, so the CI edits the .env.
           sed -i -E 's/^(IFDD_PROXY_HTTPS?_PORT)=/\1=127.0.0.1:/' ci-run/work/proxy/.env
           grep -E '^IFDD_PROXY_HTTPS?_PORT=' ci-run/work/proxy/.env
+          # oauth2-proxy trusts the bundle (local CA and ca_certs), not ca.crt alone.
+          grep -F 'OAUTH2_PROXY_PROVIDER_CA_FILES: "/certs/ca-bundle.crt"' \
+            ci-run/work/proxy/docker-compose-production.yml
+          test "$(grep -c 'BEGIN CERTIFICATE' ci-run/work/proxy/certs/ca-bundle.crt)" = 2
+          # the further realm: its values file and the import file build_realm.py wrote
+          test -s ci-run/work/keycloak/realm/import/dev-realm.json
 
       - name: Local setup (/etc/hosts and the local CA)
         run: |
@@ -120,6 +142,7 @@ jobs:
           [ "$code" = 302 ] || failed=1
           for url in \
               https://id.ci.test/realms/ifdd/.well-known/openid-configuration \
+              https://id.ci.test/realms/dev/.well-known/openid-configuration \
               https://rest.ci.test/version \
               https://ui.ci.test/ \
               https://schema.ci.test/v1/ \

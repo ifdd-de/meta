@@ -141,6 +141,23 @@ def test_wheel_paths_are_relative_to_the_file(tmp_path):
     assert settings["wheels"] == {"be-core": tmp_path / "c" / "../be-core/dist"}
 
 
+def test_file_sources_are_relative_to_the_file_and_default_to_none(tmp_path):
+    assert load(cwd=tmp_path, environ={})["files"] == {}
+    text = "files:\n  keycloak/realm/values_dev.toml: private/realm-dev.toml\n"
+    write(tmp_path / "c" / "ifdd-meta.yaml", text)
+    settings = load(settings_file=tmp_path / "c" / "ifdd-meta.yaml", cwd=tmp_path, environ={})
+    assert settings["files"] == {
+        "keycloak/realm/values_dev.toml": tmp_path / "c" / "private/realm-dev.toml"
+    }
+
+
+@pytest.mark.parametrize("value", ["[a, b]", "{a: ''}", "{a: 1}"])
+def test_files_must_map_targets_to_sources(tmp_path, value):
+    write(tmp_path / "ifdd-meta.yaml", f"files: {value}\n")
+    with pytest.raises(SettingsError, match="files"):
+        load(cwd=tmp_path, environ={})
+
+
 def test_invalid_yaml_and_wrong_top_level(tmp_path):
     write(tmp_path / "ifdd-meta.yaml", "a: [\n")
     with pytest.raises(SettingsError, match="not valid YAML"):
