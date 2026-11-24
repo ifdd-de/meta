@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -47,7 +48,7 @@ FILES = {
 
 
 #: Like the templates: secrets, generated configuration and certificates stay out of Git.
-GITIGNORE = ".env\nsecrets/*\n!secrets/.gitkeep\ncerts/*\n!certs/README.md\n"
+GITIGNORE = ".env\nsecrets/*\n!secrets/.gitkeep\ncerts/*\n!certs/README.md\nbackups/\n"
 
 
 def make_template(root: Path, service: str, gitignore: str = GITIGNORE) -> None:
@@ -354,10 +355,11 @@ def test_secrets_file_of_an_external_keycloak_is_checked(tmp_path, templates):
         run_create(settings)
 
 
-def private_files(tmp_path) -> str:
-    (tmp_path / "private").mkdir()
-    (tmp_path / "private" / "realm-dev.toml").write_text('[realm]\nname = "dev"\n')
-    (tmp_path / "private" / "theme.css").write_text("/* own */\n")
+def private_files(tmp_path, reuse=False) -> str:
+    if not reuse:
+        (tmp_path / "private").mkdir()
+        (tmp_path / "private" / "realm-dev.toml").write_text('[realm]\nname = "dev"\n')
+        (tmp_path / "private" / "theme.css").write_text("/* own */\n")
     return (
         "files:\n"
         "  keycloak/realm/values_dev.toml: private/realm-dev.toml\n"
@@ -420,3 +422,51 @@ def test_ca_certs_with_own_certificates_give_oauth2_proxy_the_extras(tmp_path, t
     run_create(settings)
     bundle = settings["workdir"] / "proxy" / "certs" / "ca-bundle.crt"
     assert bundle.read_text() == "-----root-----\n-----proxy-ca-----\n"
+
+
+@pytest.fixture
+def umask_0007():
+    """The umask of the operating user on the stages."""
+    before = os.umask(0o007)
+    yield
+    os.umask(before)
+
+
+def test_copies_are_readable_for_other_users_whatever_the_umask(tmp_path, templates, umask_0007):
+    """files: and ca_certs are read by containers of other users (Keycloak, Grafana)."""
+    private_files(tmp_path)
+    (tmp_path / "private" / "token").write_text("t")
+    (tmp_path / "private" / "theme.css").chmod(0o600)  # as written with umask 0077
+    text = (
+        "services: [proxy, keycloak, be]\n"
+        + private_files(tmp_path, reuse=True)
+        + "  keycloak/secrets/token: private/token\n"
+        + extra_certs(tmp_path)
+    )
+    settings = settings_for(tmp_path, templates, text)
+    run_create(settings)
+    work = settings["workdir"]
+
+    def mode(path):
+        return oct(path.stat().st_mode & 0o777)
+
+    assert mode(work / "keycloak/themes/ifdd/login/resources/css/ifdd.css") == "0o644"
+    assert mode(work / "keycloak/realm/values_dev.toml") == "0o644"
+    assert mode(work / "keycloak/secrets/token") == "0o600"
+    assert mode(work / "backend/certs/extra-root.crt") == "0o644"
+    assert mode(work / "backend/certs/ca.crt") == "0o644"
+    assert mode(work / "proxy/certs/ca-bundle.crt") == "0o644"
+
+
+def test_kept_database_dumps_come_back_into_a_new_keycloak(tmp_path, templates):
+    kept = tmp_path / "state" / "keycloak" / "backups" / "daily"
+    kept.mkdir(parents=True)
+    (kept / "keycloak-20261117.sql.gz").write_text("old")
+    settings = settings_for(tmp_path, templates, "services: [proxy, keycloak]\n")
+    _, lines = run_create(settings)
+    dump = settings["workdir"] / "keycloak" / "backups" / "daily" / "keycloak-20261117.sql.gz"
+    assert dump.read_text() == "old"
+    assert any("Restored keycloak/backups/" in line for line in lines)
+    keycloak = settings["workdir"] / "keycloak"
+    assert git(keycloak, "status", "--porcelain") == ""
+    assert not [n for n in git(keycloak, "ls-files").split() if n.startswith("backups/")]

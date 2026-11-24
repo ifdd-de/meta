@@ -63,6 +63,38 @@ def realm_suffix(realm: str) -> str:
     return realm.replace(".", "_").replace("-", "_").upper()
 
 
+#: --grafana-role: the variable that names its realm role (ifdd-ts maps it to Grafana).
+GRAFANA_ROLES = {
+    "admin": "ifdd_ts_role_admin",
+    "editor": "ifdd_ts_role_editor",
+    "viewer": "ifdd_ts_role_viewer",
+}
+
+
+def _variables(settings: Settings) -> dict:
+    return yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))["default_context"]
+
+
+def realm_of(settings: Settings, realm: str | None) -> tuple[str, str]:
+    """(realm, its secret suffix or ""): the realm of the instance or one of extra_realms."""
+    variables = _variables(settings)
+    main = variables["ifdd_keycloak_realm"]
+    extra = [r.strip() for r in variables.get("ifdd_keycloak_extra_realms", "").split(",")]
+    extra = [r for r in extra if r]
+    realm = realm or main
+    if realm != main and realm not in extra:
+        known = ", ".join([main, *extra])
+        raise KeycloakError(f"realm {realm!r} is not a realm of this Keycloak ({known})")
+    return realm, "" if realm == main else realm_suffix(realm)
+
+
+def grafana_role(settings: Settings, role: str) -> str:
+    """The realm role behind a Grafana role (admin, editor, viewer) of the installation."""
+    if role not in GRAFANA_ROLES:
+        raise KeycloakError(f"Grafana role must be one of {', '.join(GRAFANA_ROLES)}: {role!r}")
+    return _variables(settings)[GRAFANA_ROLES[role]]
+
+
 def export_secrets(settings: Settings, realm: str | None) -> list[str]:
     """Lines VARIABLE=value with the client secrets of a realm, for the server that uses it.
 
@@ -72,21 +104,11 @@ def export_secrets(settings: Settings, realm: str | None) -> list[str]:
     state = load_state(settings)
     if "keycloak" not in state:
         raise KeycloakError("no keycloak instance; run 'ifdd-meta create' first")
-    variables = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))
-    main = variables["default_context"]["ifdd_keycloak_realm"]
-    extra = [
-        r.strip()
-        for r in variables["default_context"].get("ifdd_keycloak_extra_realms", "").split(",")
-        if r.strip()
-    ]
-    realm = realm or main
-    if realm != main and realm not in extra:
-        known = ", ".join([main, *extra])
-        raise KeycloakError(f"realm {realm!r} is not a realm of this Keycloak ({known})")
+    realm, suffix = realm_of(settings, realm)
     env = envfile.read(settings["workdir"] / state["keycloak"] / ".env")
     lines = []
     for variable in KEYCLOAK_EXPORTS:
-        name = variable if realm == main else f"{variable}_{realm_suffix(realm)}"
+        name = f"{variable}_{suffix}" if suffix else variable
         if env.get(name):
             lines.append(f"{variable}={env[name]}")
     if not lines:
@@ -168,13 +190,15 @@ class Admin:
         )
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> Admin:
-        """The admin API of the realm of an installation created by ifdd-meta."""
+    def from_settings(cls, settings: Settings, realm: str | None = None) -> Admin:
+        """The admin API of a realm of an installation created by ifdd-meta.
+
+        ``realm``: the realm of the instance (default) or one of its extra_realms.
+        """
         state = load_state(settings)
         if "keycloak" not in state:
             raise KeycloakError("no keycloak instance; run 'ifdd-meta create' first")
-        variables = yaml.safe_load(settings["variables"].read_text(encoding="utf-8"))
-        realm = variables["default_context"]["ifdd_keycloak_realm"]
+        realm, _ = realm_of(settings, realm)
         return cls.from_instance(
             settings["workdir"] / state["keycloak"], realm, trust_files(settings, state)
         )

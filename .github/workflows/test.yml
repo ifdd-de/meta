@@ -42,6 +42,13 @@ jobs:
       - name: Test
         run: pytest -q
 
+      - name: Shell scripts (shellcheck)
+        # The example of docs/multi-server.md and the shell of the integration run.
+        run: |
+          command -v shellcheck || sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck --version
+          shellcheck docs/examples/tools-vserver.sh tools/ci/umask0007.sh
+
   config:
     name: config (demo)
     runs-on: ubuntu-latest

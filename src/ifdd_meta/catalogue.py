@@ -41,7 +41,8 @@ DEPENDENCIES = {
 }
 #: Services a service needs on the same server (ts-api writes into the ingest network of ts).
 LOCAL_DEPENDENCIES = {"ts-api": ("ts",)}
-#: Host label of the Traefik dashboard; it gets no network alias and no DNS record.
+#: Host label of the Traefik dashboard; no network alias, and a DNS record (hosts.txt)
+#: only when the proxy block names its host.
 DASHBOARD_LABEL = "proxy"
 #: Host label of the local Git server for the wf flows (setting wf_git: local).
 GIT_LABEL = "git"
@@ -122,8 +123,10 @@ KEYCLOAK_EXPORTS = tuple(dict.fromkeys(
 CA_BUNDLE = "ca-bundle.crt"
 EXTRA_CA_PREFIX = "extra-"
 
-#: Files that survive "down --purge" (relative to the instance), e.g. the ACME state.
-PERSIST = {"proxy": ("letsencrypt/acme.json",)}
+#: Files and directories that survive "down --purge" (relative to the instance): the
+#: ACME state, the database dumps of keycloak (added to, never deleted, and put back
+#: into the next instance for adm_backup_restore.sh).
+PERSIST = {"proxy": ("letsencrypt/acme.json",), "keycloak": ("backups",)}
 #: Docker volumes (Compose names) that survive "down --purge"; the next instance of
 #: the same name finds them again. lab: the Docker-in-Docker daemon with the homes.
 PERSIST_VOLUMES = {"lab": ("dind-data",)}

@@ -38,6 +38,12 @@ from .settings import Settings
 from .templates import location
 
 STATE_DIR = ".ifdd-meta"
+#: umask of every ifdd-meta command (cli.py): rendered files 0644, directories 0755.
+UMASK = 0o022
+#: Mode of copied certificates and of files: targets that are no secrets.
+PUBLIC_MODE = 0o644
+#: Mode of files: targets that look like secrets (secret_like).
+SECRET_MODE = 0o600
 WF_GIT_TOKEN = "IFDD_META_WF_GIT_TOKEN"
 STATE_FILE = "instances.json"
 
@@ -211,10 +217,13 @@ def _variables(settings: Settings) -> dict:
 
 
 def _restore_persistent(settings: Settings, service: str, path: Path, run: Run) -> None:
-    """Put files kept by "down --purge" back into a new instance."""
+    """Put files and directories kept by "down --purge" back into a new instance."""
     for relative in PERSIST.get(service, ()):
         kept = settings["persist"] / service / relative
-        if kept.is_file():
+        if kept.is_dir():  # e.g. the database dumps of keycloak, for adm_backup_restore.sh
+            shutil.copytree(kept, path / relative, dirs_exist_ok=True)
+            run.overview(f"Restored {service}/{relative}/ from {settings['persist']}")
+        elif kept.is_file():
             target = path / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(kept, target)
@@ -269,6 +278,7 @@ def _certificates(settings: Settings, state, services, run: Run) -> None:
             if not target.is_dir():
                 raise CreateError(f"{service}: directory missing: {target}")
             shutil.copy2(ca, target / "ca.crt")
+            (target / "ca.crt").chmod(PUBLIC_MODE)
             run.note(f"{ca} -> {target}")
     run.overview(f"Local CA: {ca} (trust it in the browser or the operating system)")
 
@@ -303,12 +313,14 @@ def _extra_ca(settings: Settings, state, services, run: Run) -> None:
         target = workdir / state[service] / "certs"
         target.mkdir(exist_ok=True)
         for cert in certs:
-            shutil.copy2(cert, target / f"{EXTRA_CA_PREFIX}{cert.stem}.crt")
+            copy = target / f"{EXTRA_CA_PREFIX}{cert.stem}.crt"
+            shutil.copy2(cert, copy)
+            copy.chmod(PUBLIC_MODE)  # read by containers of other users (Grafana)
         run.overview(f"CA certificates ({len(certs)}) -> {service}/certs/")
     for service, path, variable in CA_FILE_SETTINGS:
         if service not in services or service not in state or settings["tls"] == "letsencrypt":
             continue  # with Let's Encrypt ct keeps the system trust store
-        (workdir / state[service] / "certs" / CA_BUNDLE).write_text(bundle_text, encoding="utf-8")
+        _write_public(workdir / state[service] / "certs" / CA_BUNDLE, bundle_text)
         copysecret.set_env(workdir / state[service] / path, variable, f"/certs/{CA_BUNDLE}")
         run.overview(f"{service}/{path}: {variable}=/certs/{CA_BUNDLE}")
     if "proxy" in services and "proxy" in state:
@@ -316,8 +328,13 @@ def _extra_ca(settings: Settings, state, services, run: Run) -> None:
         # names this file in ifdd_proxy_oauth2_proxy_ca_file when ca_certs is set.
         target = workdir / state["proxy"] / "certs"
         target.mkdir(exist_ok=True)
-        (target / CA_BUNDLE).write_text(bundle_text, encoding="utf-8")
+        _write_public(target / CA_BUNDLE, bundle_text)
         run.overview(f"proxy/certs/{CA_BUNDLE}: CA bundle for oauth2-proxy")
+
+
+def _write_public(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+    path.chmod(PUBLIC_MODE)
 
 
 def _own_targets(settings: Settings, service: str) -> list[str]:
@@ -344,6 +361,8 @@ def _private_files(settings: Settings, state, services, run: Run) -> None:
             run.overview(f"{target}: replaces the template file (now on the skip list)")
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
+        # whatever the mode of the source: readable for the containers, unless a secret
+        destination.chmod(SECRET_MODE if secret_like(inside) else PUBLIC_MODE)
         run.overview(f"Copied {source.name} -> {target}")
     realms = realm_files(list(settings["files"].items()))
     if realms and "keycloak" in services and "keycloak" in state:

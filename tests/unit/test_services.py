@@ -196,6 +196,38 @@ def test_down_and_purge_keep_the_acme_state(world):
     assert list((world / "networks").iterdir()) == []
 
 
+def test_purge_keeps_the_database_dumps_of_keycloak_and_adds_to_them(world):
+    s = settings(world)
+    dumps = world / "work" / "keycloak" / "backups"
+    (dumps / "daily").mkdir(parents=True)
+    (dumps / "daily" / "keycloak-20261124.sql.gz").write_text("new")
+    earlier = world / "state" / "keycloak" / "backups" / "daily"
+    earlier.mkdir(parents=True)
+    (earlier / "keycloak-20261117.sql.gz").write_text("old")  # from an earlier purge
+    run, lines = run_for(world)
+    services.down(s, run, purge=True)
+    kept = world / "state" / "keycloak" / "backups"
+    assert sorted(p.name for p in (kept / "daily").iterdir()) == [
+        "keycloak-20261117.sql.gz",
+        "keycloak-20261124.sql.gz",
+    ]
+    assert oct(kept.stat().st_mode & 0o777) == "0o700"  # the dumps hold password hashes
+    assert not (world / "work" / "keycloak").exists()
+
+
+def test_a_protected_installation_is_never_purged(world):
+    (world / "ifdd-meta.yaml").write_text(
+        (world / "ifdd-meta.yaml").read_text() + "installation: dev\nprotected: true\n"
+    )
+    run, _ = run_for(world)
+    with pytest.raises(create.CreateError, match="installation dev is protected"):
+        services.down(settings(world), run, purge=True)
+    assert calls(world) == []
+    assert (world / "work" / "backend").is_dir()
+    services.down(settings(world), run)  # stopping without --purge is allowed
+    assert any(" down " in c for c in calls(world))
+
+
 def test_purge_with_only_is_refused(world):
     run, _ = run_for(world)
     with pytest.raises(create.CreateError, match="do not combine"):

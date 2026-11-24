@@ -165,3 +165,23 @@ def test_invalid_yaml_and_wrong_top_level(tmp_path):
     write(tmp_path / "ifdd-meta.yaml", "- a\n")
     with pytest.raises(SettingsError, match="mapping at the top level"):
         load(cwd=tmp_path, environ={})
+
+
+@pytest.mark.parametrize(
+    ("file", "environ", "expected"),
+    [
+        ("", {}, False),
+        ("protected: true\n", {}, True),
+        ("protected: true\n", {"IFDD_META_PROTECTED": "false"}, False),  # deliberate, by hand
+        ("", {"IFDD_META_PROTECTED": "yes"}, True),
+    ],
+)
+def test_protected(tmp_path, file, environ, expected):
+    write(tmp_path / "ifdd-meta.yaml", file)
+    assert load(cwd=tmp_path, environ=environ)["protected"] is expected
+
+
+def test_protected_must_be_a_truth_value(tmp_path):
+    write(tmp_path / "ifdd-meta.yaml", "protected: maybe\n")
+    with pytest.raises(SettingsError, match="expected true or false"):
+        load(cwd=tmp_path, environ={})

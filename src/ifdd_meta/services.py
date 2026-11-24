@@ -143,6 +143,8 @@ def down(
 ) -> None:
     if purge and only:
         raise CreateError("--purge removes the whole installation; do not combine it with --only")
+    if purge:
+        refuse_if_protected(settings, "down --purge")
     instances = _instances(settings, only)
     order = list(dict.fromkeys(service for service, _ in reversed(START)))
     order += [service for service in instances if service not in order]
@@ -305,11 +307,27 @@ def _remove_volumes_except(
             run.command(["docker", "volume", "rm", volume], cwd=settings["workdir"])
 
 
+def refuse_if_protected(settings: Settings, what: str) -> None:
+    """A protected installation (a stage) is only updated, never deleted and created again."""
+    if settings["protected"]:
+        raise CreateError(
+            f"installation {settings['installation']} is protected (protected: true in its "
+            f"description): no {what}; use update. To tear it down after all, remove "
+            "protected from the description and compile again"
+        )
+
+
 def _keep_persistent(settings: Settings, instances: dict[str, Path], run: Run) -> None:
     for service, path in instances.items():
         for relative in PERSIST.get(service, ()):
             source = path / relative
-            if source.is_file():
+            if source.is_dir():
+                target = settings["persist"] / service / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(source, target, dirs_exist_ok=True)
+                target.chmod(0o700)  # database dumps hold password hashes
+                run.overview(f"Kept {service}/{relative}/ in {settings['persist']}")
+            elif source.is_file():
                 target = settings["persist"] / service / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)

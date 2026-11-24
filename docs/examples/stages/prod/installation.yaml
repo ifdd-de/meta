@@ -1,0 +1,57 @@
+# Description of the stage prod for ifdd-meta ("ifdd-meta compile" writes the
+# files next to it). Your own copy is private: keep it in installations/ on the
+# tools vServer and on the server of the stage, never in a public repository.
+# All names are invented examples below example.org: replace them with yours
+# (example of docs/multi-server.md).
+#
+# prod runs Keycloak with the realms of all stages and the static services
+# (schema, type, unit, model) for all stages, besides its own services.
+installation: prod
+protected: true                  # a stage: no down --purge, no rebuild; only update
+realm: ifdd-prod
+# Further realms of this Keycloak, one values file each (files: below); the
+# realm ifdd-demo stays here, independent of the public demo server.
+extra_realms: [ifdd-demo, ifdd-dev, ifdd-int]
+tls: own                         # certificates of the company CA, put into proxy/certs/ by hand
+contact: ifdd-admin@example.org
+context_root: assets.example.org
+wf_git: external                 # Git server of the company; token: IFDD_META_WF_GIT_TOKEN in .env
+# The company CA, its sub CA and the CA of the TLS-inspecting web proxy: every
+# service that trusts CAs gets them, ct and oauth2-proxy as one bundle.
+ca_certs:
+  - ../certs/company-root-ca.crt
+  - ../certs/company-sub-ca.crt
+  - ../certs/web-proxy-ca.crt
+overrides:
+  # wf: the flows of this stage in a repository of their own
+  ifdd_wf_git_url: "https://git.example.org/ifdd/flows-prod.git"
+  ifdd_wf_git_username: "ifdd-flows-prod"
+  ifdd_wf_git_branch: "main"
+templates:
+  ref: v26.11.2                  # every template without a ref of its own below
+services:
+  proxy: {host: proxy.prod.cache.example.org, ref: v26.11.3}   # Traefik dashboard
+  be: {host: data.prod.cache.example.org}
+  ui: {host: ui.prod.cache.example.org}
+  ts: {host: ts.prod.cache.example.org, ref: v26.11.1}
+  ts-api: {}                                  # below the host of ts
+  ct: {ref: v26.11.1}                         # no host of its own
+  wf: {host: wf.prod.cache.example.org}
+  lab: {host: lab.prod.cache.example.org, ref: v26.11.3}
+  keycloak: {host: oidc.example.org, ref: v26.11.3}
+  schema: {host: schema.model.example.org, ref: v26.11.1}
+  type: {host: type.model.example.org, ref: v26.11.1}
+  unit: {host: unit.model.example.org, ref: v26.11.1}
+  model: {host: linkml.model.example.org, ref: v26.11.6}
+# Copied by create only (update leaves them alone); the targets go onto the
+# skip list of their instance.
+files:
+  # values files of the further realms: copies of keycloak/realm/values.toml
+  # with their own [realm] name, client ids and URLs
+  - {from: realms/values_ifdd-demo.toml, to: keycloak/realm/values_ifdd-demo.toml}
+  - {from: realms/values_ifdd-dev.toml, to: keycloak/realm/values_ifdd-dev.toml}
+  - {from: realms/values_ifdd-int.toml, to: keycloak/realm/values_ifdd-int.toml}
+  # the company login theme (replaces or adds files of the template theme)
+  - {from: theme/theme.properties, to: keycloak/themes/ifdd/login/theme.properties}
+  - {from: theme/ifdd.css, to: keycloak/themes/ifdd/login/resources/css/ifdd.css}
+  - {from: theme/logo.svg, to: keycloak/themes/ifdd/login/resources/img/logo.svg}

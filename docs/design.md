@@ -278,6 +278,7 @@ services:
 ca_certs: [certs/root.crt, certs/sub.crt]     # further CAs, relative to this file
 files:                                        # private files, copied by create only
   - {from: realm-dev.toml, to: keycloak/realm/values_dev.toml}
+protected: true                               # a stage: no down --purge, no rebuild
 ```
 
 The list form stays valid. `compile` rejects an unknown service, a host for a
@@ -307,6 +308,13 @@ does not copy again (the files may be changed on the server). Targets
 `compile` reads `[realm] name` from each and requires exactly one per name of
 `extra_realms` (only with a local Keycloak), `create` runs
 `realm/build_realm.py --values` on them before the first commit.
+
+Several servers in practice (stages, a tools vServer, file modes under umask
+`0007`, `protected`): [multi-server.md](multi-server.md). Every command sets
+umask `0022` for itself and its child processes (cruft, hooks, docker), so the
+files of the instances are readable for containers that run as other users;
+secrets get their mode explicitly. `down --purge` keeps `keycloak/backups/`
+beside `acme.json` in the persist directory.
 
 ## 11. From the old meta repository
 
