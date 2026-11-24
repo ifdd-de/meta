@@ -26,6 +26,10 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    defaults:
+      run:
+        # umask 0007 in every step, as on the stages (tools/ci/umask0007.sh)
+        shell: bash tools/ci/umask0007.sh {0}
     env:
       SETTINGS: ci-run/ifdd-meta.yaml
       # Every service that runs (ct has nothing to start); wf brings the local
