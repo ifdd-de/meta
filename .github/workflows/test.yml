@@ -95,6 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OLD_REF: v26.11.1
+      OLD_KEYCLOAK_IMAGE: quay.io/keycloak/keycloak:26.8.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,6 +119,9 @@ jobs:
           import os, sys, yaml
           description = yaml.safe_load(open("config/demo/installation.yaml"))
           description["templates"] = {"ref": os.environ["OLD_REF"]}
+          # An installation made back then ran the Keycloak of that release: the
+          # old template has no built-in scopes for newer versions.
+          description.setdefault("overrides", {})["ifdd_keycloak_image"] = os.environ["OLD_KEYCLOAK_IMAGE"]
           yaml.safe_dump(description, open(sys.argv[1], "w"), sort_keys=False)
           PY
           cd "$RUNNER_TEMP/old"

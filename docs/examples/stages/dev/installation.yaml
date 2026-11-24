@@ -26,18 +26,18 @@ overrides:
   ifdd_wf_git_username: "ifdd-flows-dev"
   ifdd_wf_git_branch: "main"
 templates:
-  ref: v26.11.2                  # every template without a ref of its own below
+  ref: v26.11.11                 # every template; a service may set a ref of its own
 services:
-  proxy: {host: proxy.dev.cache.example.org, ref: v26.11.3}   # Traefik dashboard
+  proxy: {host: proxy.dev.cache.example.org}   # Traefik dashboard
   be: {host: data.dev.cache.example.org}
   ui: {host: ui.dev.cache.example.org}
-  ts: {host: ts.dev.cache.example.org, ref: v26.11.1}
+  ts: {host: ts.dev.cache.example.org}
   ts-api: {}                                  # below the host of ts
-  ct: {ref: v26.11.1}                         # no host of its own
+  ct: {}                                      # no host of its own
   wf: {host: wf.dev.cache.example.org}
-  lab: {host: lab.dev.cache.example.org, ref: v26.11.3}
-  keycloak: {host: oidc.example.org, ref: v26.11.3, external: true}
-  schema: {host: schema.model.example.org, ref: v26.11.1, external: true}
-  type: {host: type.model.example.org, ref: v26.11.1, external: true}
-  unit: {host: unit.model.example.org, ref: v26.11.1, external: true}
-  model: {host: linkml.model.example.org, ref: v26.11.6, external: true}
+  lab: {host: lab.dev.cache.example.org}
+  keycloak: {host: oidc.example.org, external: true}
+  schema: {host: schema.model.example.org, external: true}
+  type: {host: type.model.example.org, external: true}
+  unit: {host: unit.model.example.org, external: true}
+  model: {host: linkml.model.example.org, external: true}

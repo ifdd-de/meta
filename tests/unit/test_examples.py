@@ -223,3 +223,12 @@ def test_wrong_arguments(tmp_path, args, message):
     assert result.returncode == 2
     assert message in result.stderr
     assert calls == []
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_stages_use_the_release_of_the_demo(installations, stage):
+    """One release for every template: the ref of the demo, no ref per service."""
+    demo = load(Path(__file__).parents[2] / "config" / "demo" / "installation.yaml")
+    description = load(installations / stage / "installation.yaml")
+    assert description.ref == demo.ref
+    assert description.refs == {}

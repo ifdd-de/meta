@@ -73,7 +73,7 @@ environment: production             # production | development
 tls: local-ca                       # local-ca | letsencrypt | own (from the description)
 templates:
   source: https://github.com/ifdd-de   # URL base or directory of local clones
-  ref: v26.11.2                         # tag, branch or commit for all templates
+  ref: v26.11.11                        # tag, branch or commit for all templates
   refs: {}                              # exceptions, e.g. {be: main}
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]  # catalogue order; lab only if listed
 workdir: work/example               # instances are created here
@@ -228,9 +228,9 @@ extra_realms: []
 context_root: ifdd.de
 services: [proxy, keycloak, be, ui, schema, type, unit, ct, ts, ts-api, wf, model]
 templates:
-  ref: v26.11.2                       # tag, branch or commit for all templates
-  refs:                               # exceptions, e.g. templates without that tag
-    schema: v26.11.1
+  ref: v26.11.11                      # tag, branch or commit for all templates
+  refs:                               # exceptions, e.g. a branch under test
+    schema: main
 overrides:                            # any template variable, set explicitly
   ifdd_ts_retention_period: "10y"
 ```
@@ -273,7 +273,7 @@ services:
   be: {host: data.dev.cache.example.ifdd.de}
   ts-api: {}                                  # no host of its own
   keycloak: {host: oidc.example.ifdd.de, external: true}
-  wf: {ref: v26.11.2}                         # instead of templates.refs
+  wf: {ref: main}                             # instead of templates.refs
   git: {host: git.dev.example.ifdd.de}        # host only, no service
 ca_certs: [certs/root.crt, certs/sub.crt]     # further CAs, relative to this file
 files:                                        # private files, copied by create only
